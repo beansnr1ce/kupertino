@@ -2,7 +2,7 @@
 
 **macOS behavior for KDE Plasma — keyd layers, KWin scripts, and muscle-memory parity.**
 
-Not a theme. kupertino doesn't try to make Linux *look* like macOS — it makes it *behave* like macOS everywhere muscle memory matters: ⌘C/⌘V with Command next to the spacebar, ⌘Tab app switching, ⌘Space launcher, ⌥-word / ⌘-line text navigation, ⇧⌘4 screenshots, Control-arrow Spaces, and all 22 of [Rectangle.app](https://github.com/rxhanson/rectangle)'s window-management shortcuts.
+Not a theme. kupertino doesn't try to make Linux *look* like macOS — it makes it *behave* like macOS everywhere muscle memory matters: ⌘C/⌘V with Command next to the spacebar, ⌘Tab app switching, ⌥-word / ⌘-line text navigation, ⇧⌘4 screenshots, Control-arrow Spaces, and all 22 of [Rectangle.app](https://github.com/rxhanson/rectangle)'s window-management shortcuts.
 
 Built and daily-driven on **CachyOS + KDE Plasma 6 (Wayland)**. Everything here is extracted from a working machine; a configurable installer is the roadmap, not yet reality — for now this repo is the reference implementation plus the docs to apply it by hand.
 
@@ -25,7 +25,7 @@ Everything else — launcher bindings, KWin shortcuts, the Rectangle script — 
 | Layer | What you get |
 |---|---|
 | 1. Modifier remap | Mac modifier row via keyd layers |
-| 2. Launcher | ⌘Space → [Vicinae](https://github.com/vicinaehq/vicinae) (Spotlight/Raycast), ⌥Space → KRunner backup |
+| 2. Launcher | *Not included yet* — see [Roadmap](#roadmap) |
 | 3. Text editing | ⌥/⌘ word, line, and document navigation + deletion, Shift-selection included |
 | 4. ⌘Tab | Held-modifier app switcher via keyd `swapm()` into KWin's switcher |
 | 5. ⌘W / ⌘Q | Close tab per-app; close window compositor-wide |
@@ -74,7 +74,7 @@ Everything else (shortcuts, panels, snapshots) is currently hand-applied — [do
 ## Roadmap
 
 - **The installer** — one script, per-layer opt-in, with toggles for taste (hot corners, natural scrolling, …)
-- **Vicinae deep-dive** — clipboard history, snippets, calculator, extension hotkeys
+- **The launcher (⌘Space)** — the Spotlight/Raycast slot is deliberately unfilled. Candidates to evaluate before committing: [Vicinae](https://github.com/vicinaehq/vicinae), [Albert](https://github.com/albertlauncher/albert), [Ulauncher](https://github.com/Ulauncher/Ulauncher), or a tuned KRunner. Opinions and comparisons welcome in issues.
 - **Fullscreen ⌃⌘F** — macOS-style fullscreen-to-its-own-Space (KWin script)
 - **External backup** — btrbk to an external drive, completing the Time Machine story
 

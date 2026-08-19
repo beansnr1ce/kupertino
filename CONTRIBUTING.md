@@ -7,7 +7,8 @@ Thanks for the interest! This project is young — extracted from one working ma
 1. **Distro testing.** Everything was built on CachyOS + Plasma 6 (Wayland). Reports (and fixes) from Fedora KDE, openSUSE, Kubuntu, Arch, etc. are gold. Open an issue with your distro, Plasma version, and what broke.
 2. **The installer.** The goal is one script with per-layer opt-in and taste toggles (hot corners, natural scrolling). Design input welcome before code.
 3. **Cupertino Rectangle review.** `kwin-scripts/cupertino-rectangle/` is a self-contained KWin script; KWin-scripting expertise (multi-monitor edge cases, per-desktop behavior) is appreciated.
-4. **Missing macOS behaviors.** Fullscreen-to-its-own-Space (⌃⌘F) is the biggest open item.
+4. **The launcher decision.** The ⌘Space Spotlight/Raycast slot is deliberately unfilled — comparisons of Vicinae, Albert, Ulauncher, tuned KRunner, and anything else worth considering are welcome as issues.
+5. **Missing macOS behaviors.** Fullscreen-to-its-own-Space (⌃⌘F) is the biggest open item.
 
 ## Ground rules
 

@@ -75,26 +75,13 @@ keyd sits below everything, so **every application and KDE setting sees the swap
 
 Side effects of physical Ctrl emitting Meta: all KWin shortcuts (`Meta+W` overview, `Meta+D` peek desktop, `Meta+Tab` window walk, …) sit on the physical Ctrl key, and a bare Ctrl tap opens the Kickoff menu (KDE's Meta-tap binding).
 
-## Layer 2: App launcher (Spotlight equivalent)
+## Layer 2: App launcher (Spotlight equivalent) — not in kupertino yet
 
 Goal: physical **Alt+Space** (the ⌘Space position) opens a launcher, like Spotlight.
 
-### Vicinae — primary
+**Deliberately not part of kupertino for now.** The reference machine runs [Vicinae](https://github.com/vicinaehq/vicinae) on physical Alt+Space (registered KDE-side as `Ctrl+Space` — see mental model above) with KRunner as a backup on physical Win+Space, but the project hasn't committed to a launcher: alternatives (Vicinae, Albert, Ulauncher, a tuned KRunner) need evaluating first. See Known gaps.
 
-- **Version:** v0.25.0, manually installed at `/usr/local/bin/vicinae`
-- **Config:** `~/.config/vicinae/settings.json`
-- **Shortcut:** registered in KDE as `Ctrl+Space` → triggers on **physical Alt+Space** (see mental model above)
-- **Stored in:** `~/.config/kglobalshortcutsrc` under `[services][vicinae.desktop]`, key `open=Ctrl+Space`
-
-### KRunner — backup
-
-Kept on a second shortcut in case Vicinae breaks:
-
-- **Shortcut:** registered in KDE as `Alt+Space` → triggers on **physical Win+Space** (the Win key carries the Alt/⌥ role)
-- Original bindings (KDE-side `Alt+F2` = physical Win+F2, Search media key) still active
-- **Stored in:** `~/.config/kglobalshortcutsrc` under `[services][org.kde.krunner.desktop]`
-
-So: physical Alt+Space → Vicinae, physical Win+Space → KRunner.
+Whatever wins, the wiring is one `kglobalshortcutsrc` entry under `[services][<launcher>.desktop]` set to `Ctrl+Space`, applied with the recipe below.
 
 ### How to change KDE global shortcuts from the CLI
 
@@ -304,7 +291,7 @@ Not everything should be mac-like. Choices that intentionally break the metaphor
 
 ## Known gaps / future work
 
-- **Vicinae deep-dive session:** configure Raycast-style functionality — clipboard history, snippets, calculator, file search, extension hotkeys.
+- **Launcher (⌘Space):** evaluate the candidates (Vicinae, Albert, Ulauncher, tuned KRunner) and commit kupertino to one; then the deep-dive — clipboard history, snippets, calculator, file search, extension hotkeys.
 - **External backup:** the other half of Time Machine — `btrbk` (or similar) sending snapshots to an external drive; local snapshots don't survive disk death.
 - **Fullscreen ⌃⌘F:** the one Rectangle-adjacent item still open — macOS-style fullscreen-to-dedicated-Space needs a KWin script that moves the window to a new desktop on fullscreen and cleans up on exit.
 
