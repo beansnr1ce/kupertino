@@ -289,6 +289,10 @@ Not everything should be mac-like. Choices that intentionally break the metaphor
 - **CachyOS launcher button on the dock** (2026-08-18): an Application Launcher (Kickoff, `org.kde.plasma.kickoff`) with the CachyOS logo (`/usr/share/icons/cachyos.svg`, icon name `cachyos`) sits at the left end of the bottom panel — too much functionality behind it to hide. Widget id 74 in `~/.config/plasma-org.kde.plasma.desktop-appletsrc`, containment 23. Same menu also opens on a bare physical-Ctrl tap (Meta tap binding).
   - Ops note: widgets can be added live via `qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript`, but *reordering* requires stopping plasmashell, editing `AppletOrder`, and starting it again — plasmashell rewrites the config from memory on shutdown, so edit only while it's stopped and match lines by content, not line number.
 
+## Considered, not implemented: visual theming (MacTahoe)
+
+[vinceliuice/MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde) (2026-08-19): the full macOS Tahoe visual kit for Plasma — Plasma style, traffic-light window decorations, color schemes, Kvantum, SDDM, wallpapers, companion icon/cursor repos, optional blur (kwin-effects-forceblur, 24px corners). Decided to **stay behavior-only** — this project's philosophy holds. Logged as the go-to if that ever changes. Notes from vetting: `install.sh` only copies files (safe, applies nothing); if ever applied, use individual components — applying it as a Global Theme with "desktop layout" checked would rebuild the panels and destroy the menu-bar/dock setup.
+
 ## Known gaps / future work
 
 - **Launcher (⌘Space):** evaluate the candidates (Vicinae, Albert, Ulauncher, tuned KRunner) and commit kupertino to one; then the deep-dive — clipboard history, snippets, calculator, file search, extension hotkeys.
