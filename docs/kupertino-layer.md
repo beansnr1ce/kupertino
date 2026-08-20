@@ -1,4 +1,4 @@
-# Cupertino Layer — implementation notes
+# Kupertino Layer — implementation notes
 
 The living implementation doc behind kupertino: every layer, every file touched, every trade-off, and the debugging lessons learned along the way. Written against the reference machine and updated as changes land there; treat paths and versions as that machine's, not universal.
 
