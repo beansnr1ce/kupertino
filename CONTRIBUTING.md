@@ -13,7 +13,7 @@ Thanks for the interest! This project is young — extracted from one working ma
 ## Ground rules
 
 - **Read [docs/cupertino-layer.md](docs/cupertino-layer.md) first.** It explains every decision and documents the traps (keyd composite layers can't carry modifier tags; `Qt.rect()` doesn't exist in KWin JS; Qt arrow keycodes are Left/Up/Right/Down, not Left/Right adjacent; `keyd reload` segfaults 2.6.0 with layered configs). Don't re-lose battles that are already won.
-- **Behavior, not looks.** Theming PRs (icons, cursors, window decorations) are out of scope.
+- **Keyboard shortcuts and muscle memory — that's the whole scope.** Theming PRs (icons, cursors, window decorations) are out of scope, and so are non-keyboard features (snapshots/backup, panel layouts, file sharing). The implementation notes mention some of those as reference-machine context; that doesn't make them project scope.
 - **Every change reversible and documented** — one config file or one setting where possible, with the file it touches and why noted in the docs.
 - **Layer discipline.** Key remapping happens once, in keyd. Everything above configures in post-remap terms. PRs that fight the remap instead of adapting to it will be asked to restructure.
 

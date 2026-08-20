@@ -3,6 +3,8 @@
 The living implementation doc behind kupertino: every layer, every file touched, every trade-off, and the debugging lessons learned along the way. Written against the reference machine and updated as changes land there; treat paths and versions as that machine's, not universal.
 
 **Reference machine:** CachyOS, KDE Plasma 6.7.4 (Wayland), kernel `linux-cachyos`
+
+> **Scope note:** kupertino's scope is **keyboard shortcuts and muscle memory** (Layers 1–7 and 11). Layers 8–10 (desktop behaviors, btrfs snapshots, menu bar) are reference-machine extras documented for context — they are not part of the project.
 **Last updated:** 2026-08-19 (Rectangle window management)
 
 ---

@@ -1,8 +1,10 @@
 # kupertino
 
-**macOS behavior for KDE Plasma — keyd layers, KWin scripts, and muscle-memory parity.**
+**macOS keyboard shortcuts for KDE Plasma — keyd layers, KWin scripts, and muscle-memory parity.**
 
-Not a theme. kupertino doesn't try to make Linux *look* like macOS — it makes it *behave* like macOS everywhere muscle memory matters: ⌘C/⌘V with Command next to the spacebar, ⌘Tab app switching, ⌥-word / ⌘-line text navigation, ⇧⌘4 screenshots, Control-arrow Spaces, and all 22 of [Rectangle.app](https://github.com/rxhanson/rectangle)'s window-management shortcuts.
+kupertino does one thing: it makes your fingers work on KDE Plasma the way they work on a Mac. ⌘C/⌘V with Command next to the spacebar, ⌘Tab app switching, ⌥-word / ⌘-line text navigation, ⌘W/⌘Q close semantics, ⇧⌘4 screenshots, Control-arrow Spaces, and all 22 of [Rectangle.app](https://github.com/rxhanson/rectangle)'s window-management shortcuts.
+
+It is deliberately **not** a theme and not a desktop makeover. No icons, no panels, no visual changes — if you want Plasma to *look* like macOS, [MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde) does that beautifully and composes fine with this. kupertino is the half nobody had built: making Plasma *feel* like macOS under your hands.
 
 Built and daily-driven on **CachyOS + KDE Plasma 6 (Wayland)**. Everything here is extracted from a working machine; a configurable installer is the roadmap, not yet reality — for now this repo is the reference implementation plus the docs to apply it by hand.
 
@@ -18,25 +20,24 @@ One idea, applied consistently: **remap once, at the lowest level, and let every
 | Super/Win | **Alt** | ⌥ Option — word-wise movement |
 | Alt (next to space) | **Ctrl** | ⌘ Command — shortcuts |
 
-Everything else — launcher bindings, KWin shortcuts, the Rectangle script — is configured in *post-remap* terms on top of that foundation. keyd layers (not plain swaps) add the macOS text-editing behaviors: ⌘←/→ line jumps, ⌥←/→ word jumps, ⌘⌫ delete-to-line-start, with all Shift-selection variants free.
+Everything else — KWin shortcuts, Spectacle bindings, the Rectangle script — is configured in *post-remap* terms on top of that foundation. keyd layers (not plain swaps) add the macOS text-editing behaviors: ⌘←/→ line jumps, ⌥←/→ word jumps, ⌘⌫ delete-to-line-start, with all Shift-selection variants free.
 
-## What's implemented
+## The shortcuts
 
-| Layer | What you get |
+| macOS habit | Status |
 |---|---|
-| 1. Modifier remap | Mac modifier row via keyd layers |
-| 2. Launcher | *Not included yet* — see [Roadmap](#roadmap) |
-| 3. Text editing | ⌥/⌘ word, line, and document navigation + deletion, Shift-selection included |
-| 4. ⌘Tab | Held-modifier app switcher via keyd `swapm()` into KWin's switcher |
-| 5. ⌘W / ⌘Q | Close tab per-app; close window compositor-wide |
-| 6. Screenshots + Spaces | ⇧⌘3/4/5/6 → Spectacle; ⌃←/→ desktops; ⌃↑ Mission Control; ⌃↓ App Exposé |
-| 7. App conveniences | ⌘, preferences; selection-aware ⌘C/⌘V in Konsole (Ctrl-C still interrupts) |
-| 8. Desktop behaviors | Double-click-minimize titlebars, double-click open, top-right notifications |
-| 9. Time Machine | snapper hourly snapshots of /home with Apple's retention curve; bootable root snapshots |
-| 10. Menu bar | Global menu with bold app name, flush full-width panel, Dim Inactive for focus visibility |
-| 11. Rectangle | All 22 default shortcuts via the **Cupertino Rectangle** KWin script (below) |
+| ⌘C/V/X/A/S/Z, ⇧⌘Z — with ⌘ next to the spacebar | ✅ base remap |
+| ⌥←/→ word jumps, ⌘←/→ line jumps, ⌘↑/↓ doc jumps, ⌥⌫/⌘⌫ deletion, all ⇧-selection variants | ✅ keyd layers |
+| ⌘Tab / ⌘` — held-modifier app and window switching | ✅ keyd `swapm()` → KWin switcher |
+| ⌘W close tab, ⌘Q close window (compositor-wide, prompts intact) | ✅ |
+| ⇧⌘3/4/5/6 — screen, region, capture UI, active window | ✅ Spectacle |
+| ⌃←/→ Spaces, ⌃↑ Mission Control, ⌃↓ App Exposé | ✅ KWin |
+| ⌘, opens preferences; selection-aware ⌘C/⌘V in the terminal (Ctrl-C still interrupts) | ✅ |
+| Rectangle: halves, corners, thirds, two-thirds, maximize, center, restore, displays | ✅ Cupertino Rectangle (below) |
+| ⌘Space launcher | 🔜 binding recipe documented; launcher choice open — see [Roadmap](#roadmap) |
+| ⌃⌘F fullscreen-to-its-own-Space | 🔜 needs a KWin script |
 
-The full implementation notes — every file touched, every trade-off, every debugging lesson — live in [docs/cupertino-layer.md](docs/cupertino-layer.md).
+The full implementation notes — every file touched, every trade-off, every debugging lesson — live in [docs/cupertino-layer.md](docs/cupertino-layer.md). (The notes also cover a few reference-machine extras beyond kupertino's scope — snapshots, panel arrangement, desktop behaviors — kept for context.)
 
 ## Cupertino Rectangle
 
@@ -69,14 +70,13 @@ sudo cp keyd/default.conf /etc/keyd/default.conf
 keyd check /etc/keyd/default.conf && sudo systemctl enable --now keyd || sudo systemctl restart keyd
 ```
 
-Everything else (shortcuts, panels, snapshots) is currently hand-applied — [docs/cupertino-layer.md](docs/cupertino-layer.md) has the exact commands for each layer.
+The KDE-side shortcuts (⌘Q, screenshots, Spaces, Rectangle bindings) are currently hand-applied — [docs/cupertino-layer.md](docs/cupertino-layer.md) has the exact commands for each.
 
 ## Roadmap
 
-- **The installer** — one script, per-layer opt-in, with toggles for taste (hot corners, natural scrolling, …)
+- **The installer** — one script, per-layer opt-in, with toggles for taste
 - **The launcher (⌘Space)** — the Spotlight/Raycast slot is deliberately unfilled. Candidates to evaluate before committing: [Vicinae](https://github.com/vicinaehq/vicinae), [Albert](https://github.com/albertlauncher/albert), [Ulauncher](https://github.com/Ulauncher/Ulauncher), or a tuned KRunner. Opinions and comparisons welcome in issues.
 - **Fullscreen ⌃⌘F** — macOS-style fullscreen-to-its-own-Space (KWin script)
-- **External backup** — btrbk to an external drive, completing the Time Machine story
 
 ## Contributing
 
