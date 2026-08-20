@@ -6,7 +6,18 @@ kupertino does one thing: it makes your fingers work on KDE Plasma the way they 
 
 It is deliberately **not** a theme and not a desktop makeover. No icons, no panels, no visual changes — if you want Plasma to *look* like macOS, [MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde) does that beautifully and composes fine with this. kupertino is the half nobody had built: making Plasma *feel* like macOS under your hands.
 
-Built and daily-driven on **CachyOS + KDE Plasma 6 (Wayland)**. Everything here is extracted from a working machine; a configurable installer is the roadmap, not yet reality — for now this repo is the reference implementation plus the docs to apply it by hand.
+Built and daily-driven on **CachyOS + KDE Plasma 6 (Wayland)**.
+
+## Install
+
+```bash
+git clone https://github.com/beansnr1ce/kupertino
+cd kupertino && ./install.sh
+```
+
+The installer walks you through every feature below, then shows the resulting plan and asks you to **authorize each step individually** — package installs (keyd, and Spectacle if missing), the keyd config, each set of KDE bindings. Nothing touches your system until you approve it, the keyd config is validated with `keyd check` before it's installed, and a failed step aborts everything after it. Python 3 stdlib only; supports pacman, apt, dnf, and zypper.
+
+> ⚠️ A bad keyboard config can lock you out of your keyboard. keyd's panic exit is **Backspace+Escape+Enter** (terminates keyd, restoring plain keys). If you ever edit the config by hand: **never `keyd reload`** — it segfaults keyd 2.6.0 with layered configs; always `keyd check` then `sudo systemctl restart keyd`.
 
 ## How it works
 
@@ -60,21 +71,8 @@ kwriteconfig6 --file kwinrc --group Plugins --key cupertino-rectangleEnabled tru
 qdbus6 org.kde.KWin /KWin reconfigure
 ```
 
-## Installing the keyd layer
-
-> ⚠️ **Read this first.** A bad keyboard config can lock you out of your keyboard. keyd's panic exit is **Backspace+Escape+Enter** (terminates keyd, restoring plain keys). And on keyd 2.6.0 with this layered config, **never `keyd reload`** — it segfaults the daemon; always `keyd check` then restart the service.
-
-```bash
-sudo pacman -S keyd            # or your distro's package
-sudo cp keyd/default.conf /etc/keyd/default.conf
-keyd check /etc/keyd/default.conf && sudo systemctl enable --now keyd || sudo systemctl restart keyd
-```
-
-The KDE-side shortcuts (⌘Q, screenshots, Spaces, Rectangle bindings) are currently hand-applied — [docs/cupertino-layer.md](docs/cupertino-layer.md) has the exact commands for each.
-
 ## Roadmap
 
-- **The installer** — one script, per-layer opt-in, with toggles for taste
 - **The launcher (⌘Space)** — the Spotlight/Raycast slot is deliberately unfilled. Candidates to evaluate before committing: [Vicinae](https://github.com/vicinaehq/vicinae), [Albert](https://github.com/albertlauncher/albert), [Ulauncher](https://github.com/Ulauncher/Ulauncher), or a tuned KRunner. Opinions and comparisons welcome in issues.
 - **Fullscreen ⌃⌘F** — macOS-style fullscreen-to-its-own-Space (KWin script)
 
