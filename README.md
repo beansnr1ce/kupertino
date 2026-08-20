@@ -15,7 +15,7 @@ cd kupertino && ./install.sh
 
 The installer asks which features you want, then asks you to confirm each step before it runs. Requires Python 3.
 
-v1.0 supports CachyOS/Arch. On other distros the installer skips package installs — install keyd yourself first (Fedora: `alternateved/keyd` COPR; Ubuntu 24.04 LTS has no keyd package, 24.10+ and Debian 13 do).
+v1.0 supports and has been tested on CachyOS/Arch. 
 
 If a keyd config ever locks up your keyboard, press Backspace+Escape+Enter to kill keyd. Never use `keyd reload` (it segfaults keyd 2.6.0 with layered configs); run `keyd check`, then restart the service.
 
