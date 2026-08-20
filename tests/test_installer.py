@@ -84,7 +84,7 @@ delete = C-delete
 
 class TestQtKeycode(unittest.TestCase):
     def test_worked_examples_from_reference_doc(self):
-        # Values verified live on the reference machine (docs/cupertino-layer.md):
+        # Values verified live on the reference machine (docs/kupertino-layer.md):
         # arrows carry 0x01000000 and run Left, Up, Right, Down.
         cases = {
             "Ctrl+Space": 67108896,

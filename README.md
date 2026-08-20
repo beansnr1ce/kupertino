@@ -42,7 +42,7 @@ KDE shortcuts and the Snap script are configured in post-remap terms on top of t
 - ⌘, preferences; ⌘C/⌘V in Konsole (Ctrl-C still interrupts)
 - Window snapping via Cupertino Snap (below)
 
-Planned: ⌘Space launcher, ⌃⌘F fullscreen. Implementation notes: [docs/cupertino-layer.md](docs/cupertino-layer.md).
+Planned: ⌘Space launcher, ⌃⌘F fullscreen. Implementation notes: [docs/kupertino-layer.md](docs/kupertino-layer.md).
 
 ## Cupertino Snap
 
