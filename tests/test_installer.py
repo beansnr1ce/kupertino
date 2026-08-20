@@ -262,7 +262,7 @@ class TestBuildPlanKdeSteps(unittest.TestCase):
         )
         self.assertEqual(
             rect.commands[1],
-            ["cp", "-r", "/repo/kwin-scripts/cupertino-rectangle",
+            ["cp", "-r", "/repo/kwin-scripts/cupertino-snap",
              "/home/u/.local/share/kwin/scripts/"],
         )
         # Plasma defaults on Meta+Alt block the script's shortcut registration
@@ -284,7 +284,7 @@ class TestBuildPlanKdeSteps(unittest.TestCase):
         self.assertEqual(
             rect.commands[-2:],
             [["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
-              "--key", "cupertino-rectangleEnabled", "true"],
+              "--key", "cupertino-snapEnabled", "true"],
              ["qdbus6", "org.kde.KWin", "/KWin", "reconfigure"]],
         )
 

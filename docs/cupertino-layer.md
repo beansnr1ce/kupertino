@@ -5,7 +5,7 @@ The living implementation doc behind kupertino: every layer, every file touched,
 **Reference machine:** CachyOS, KDE Plasma 6.7.4 (Wayland), kernel `linux-cachyos`
 
 > **Scope note:** kupertino's scope is **keyboard shortcuts and muscle memory** (Layers 1–7 and 11). Layers 8–10 (desktop behaviors, btrfs snapshots, menu bar) are reference-machine extras documented for context — they are not part of the project.
-**Last updated:** 2026-08-19 (Rectangle window management)
+**Last updated:** 2026-08-20 (Cupertino Snap rename)
 
 ---
 
@@ -242,9 +242,9 @@ Ops note: `limine-snapper-sync.service` shows *inactive* — expected. `inotify-
 - **Global-menu limitation (inherent):** menus only appear for apps that export them — Qt/KDE and most GTK apps do (`appmenu-gtk-module` installed); Chromium/Electron apps (Brave, LocalSend) never will, on any Linux.
 - **KDE Connect removed** — LocalSend is the AirDrop answer; kdeconnect uninstalled (`pacman -Rns kdeconnect`, nothing depended on it) and its tray icon with it.
 
-## Layer 11: Rectangle window management
+## Layer 11: Rectangle-style window management (Cupertino Snap)
 
-All of [Rectangle.app](https://github.com/rxhanson/rectangle)'s default keyboard shortcuts, implemented as a custom KWin script — **Cupertino Rectangle** (`~/.local/share/kwin/scripts/cupertino-rectangle/`, enabled via `kwinrc` `[Plugins] cupertino-rectangleEnabled=true`). KWin has native tiling for halves only; the script implements all 22 actions with Rectangle's geometry semantics, including per-window Restore memory.
+All of [Rectangle.app](https://github.com/rxhanson/rectangle)'s default keyboard shortcuts, implemented as a custom KWin script — **Cupertino Snap** (`~/.local/share/kwin/scripts/cupertino-snap/`, enabled via `kwinrc` `[Plugins] cupertino-snapEnabled=true`). Renamed from "Cupertino Rectangle" 2026-08-20 (see [rectangle-naming-research.md](rectangle-naming-research.md)); the shortcut *internal* action names keep their original `Rectangle*` ids so existing `kglobalshortcutsrc` registrations survive — only display labels ("Snap: Left Half") and the package id changed. KWin has native tiling for halves only; the script implements all 22 actions with Rectangle's geometry semantics, including per-window Restore memory.
 
 Rectangle's ⌃⌥ chord = physical **Ctrl+Super** (the two bottom-left modifiers); ⌃⌥⌘ adds physical Alt. KDE-side that's `Meta+Alt` / `Meta+Alt+Ctrl`.
 
@@ -305,6 +305,7 @@ Not everything should be mac-like. Choices that intentionally break the metaphor
 
 ## Changelog
 
+- **2026-08-20** — Renamed the KWin script **Cupertino Rectangle → Cupertino Snap** (package id `cupertino-snap`, labels "Snap: …"; internal `Rectangle*` action ids unchanged so shortcut registrations survive). Prompted by a naming/trademark research pass ([rectangle-naming-research.md](rectangle-naming-research.md)): descriptive "Rectangle.app-compatible" references are nominative fair use and stay; the name itself was the cautious rename. Structure decision: the script **stays in this repo** (no spin-out, no umbrella) — a KDE Store listing can publish straight from the subdirectory.
 - **2026-08-19** — Layer 11 Rectangle: all 22 of Rectangle.app's default shortcuts on physical Ctrl+Super via a custom KWin script (Cupertino Rectangle) + keyd composite layers. Debugging surfaced two classics: `Qt.rect()` silently doesn't exist in KWin JS, and keyd 2.6 composite layers can't carry modifier tags (every chord key mapped explicitly instead). Quick-tile restored to physical Ctrl+Alt+arrows.
 - **2026-08-19** — Layer 10 menu bar polish: bold app name leftmost in the menu bar (Window Title Applet 6, widget 92), top panel de-floated (flush like a real menu bar; dock stays floating), KWin Dim Inactive at 20% so the focused window is unmistakable, KDE Connect uninstalled (LocalSend won). Documented the Electron/Chromium global-menu limitation.
 - **2026-08-19** — Layer 9 Time Machine: snapper `home` config on `/home` with Apple's retention curve (24 hourly / 30 daily / 8 weekly / 12 monthly), `snapper-timeline.timer` enabled, sudo-free browsing for your user. Root stays on pacman-event snapshots, bootable via Limine → Snapshots. Noted: local snapshots ≠ backups; btrbk-to-external logged as future work.

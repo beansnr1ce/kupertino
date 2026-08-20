@@ -191,8 +191,8 @@ FEATURES = [
     Feature("appconv", "App conveniences",
             "⌘, opens preferences in KDE apps; Konsole gets selection-aware "
             "⌘C/⌘V (Ctrl-C still interrupts when nothing is selected)."),
-    Feature("rectangle", "Rectangle window management",
-            "All 22 Rectangle.app shortcuts on ⌃⌥ (physical Ctrl+Super): "
+    Feature("rectangle", "Cupertino Snap window management",
+            "All 22 Rectangle.app-compatible shortcuts on ⌃⌥ (physical Ctrl+Super): "
             "halves, corners, thirds, maximize, center, restore, displays."),
 ]
 
@@ -450,19 +450,19 @@ def _rectangle_step(system, plan):
     scripts_dir = f"{system.home}/.local/share/kwin/scripts"
     commands = [
         ["mkdir", "-p", scripts_dir],
-        ["cp", "-r", f"{system.repo_root}/kwin-scripts/cupertino-rectangle",
+        ["cp", "-r", f"{system.repo_root}/kwin-scripts/cupertino-snap",
          f"{scripts_dir}/"],
     ]
     for component, groups, key, entry in RECTANGLE_CONFLICT_CLEARS:
         commands += _clear_cmds(component, groups, key, entry)
     commands += [
         ["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
-         "--key", "cupertino-rectangleEnabled", "true"],
+         "--key", "cupertino-snapEnabled", "true"],
         ["qdbus6", "org.kde.KWin", "/KWin", "reconfigure"],
     ]
     return Step(
         id="rectangle",
-        description="Cupertino Rectangle: all 22 Rectangle.app shortcuts on "
+        description="Cupertino Snap: all 22 Rectangle.app-compatible shortcuts on "
                     "physical Ctrl+Super (clears Plasma's Meta+Alt defaults "
                     "that would block them)",
         commands=commands,

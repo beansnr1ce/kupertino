@@ -1,9 +1,9 @@
 {
     "KPackageStructure": "KWin/Script",
     "KPlugin": {
-        "Id": "cupertino-rectangle",
-        "Name": "Cupertino Rectangle",
-        "Description": "Rectangle.app's default window-management shortcuts for KWin",
+        "Id": "cupertino-snap",
+        "Name": "Cupertino Snap",
+        "Description": "Rectangle.app-compatible window-management shortcuts for KWin. Not affiliated with or endorsed by Rectangle.app; an independent reimplementation of its default shortcuts.",
         "Icon": "window-duplicate",
         "License": "MIT",
         "Version": "1.0.0",

@@ -1,4 +1,4 @@
-// Cupertino Rectangle — Rectangle.app default shortcuts for KWin (Plasma 6)
+// Cupertino Snap — Rectangle.app-compatible default shortcuts for KWin (Plasma 6)
 // KDE-side chords assume the keyd layer: Meta+Alt = physical Ctrl+Super = mac ⌃⌥,
 // Meta+Alt+Ctrl = physical Ctrl+Super+Alt = mac ⌃⌥⌘.
 "use strict";
@@ -130,25 +130,27 @@ function moveToDisplay(offset) {
 workspace.windowRemoved.connect(w => saved.delete(w.internalId.toString()));
 
 const T = 1 / 3;
-registerShortcut("RectangleLeftHalf", "Rectangle: Left Half", "Meta+Alt+Left", place(0, 0, 0.5, 1));
-registerShortcut("RectangleRightHalf", "Rectangle: Right Half", "Meta+Alt+Right", place(0.5, 0, 0.5, 1));
-registerShortcut("RectangleTopHalf", "Rectangle: Top Half", "Meta+Alt+Up", place(0, 0, 1, 0.5));
-registerShortcut("RectangleBottomHalf", "Rectangle: Bottom Half", "Meta+Alt+Down", place(0, 0.5, 1, 0.5));
-registerShortcut("RectangleTopLeft", "Rectangle: Top Left", "Meta+Alt+U", place(0, 0, 0.5, 0.5));
-registerShortcut("RectangleTopRight", "Rectangle: Top Right", "Meta+Alt+I", place(0.5, 0, 0.5, 0.5));
-registerShortcut("RectangleBottomLeft", "Rectangle: Bottom Left", "Meta+Alt+J", place(0, 0.5, 0.5, 0.5));
-registerShortcut("RectangleBottomRight", "Rectangle: Bottom Right", "Meta+Alt+K", place(0.5, 0.5, 0.5, 0.5));
-registerShortcut("RectangleFirstThird", "Rectangle: First Third", "Meta+Alt+D", place(0, 0, T, 1));
-registerShortcut("RectangleCenterThird", "Rectangle: Center Third", "Meta+Alt+F", place(T, 0, T, 1));
-registerShortcut("RectangleLastThird", "Rectangle: Last Third", "Meta+Alt+G", place(2 * T, 0, T, 1));
-registerShortcut("RectangleFirstTwoThirds", "Rectangle: First Two Thirds", "Meta+Alt+E", place(0, 0, 2 * T, 1));
-registerShortcut("RectangleCenterTwoThirds", "Rectangle: Center Two Thirds", "Meta+Alt+R", place(1 / 6, 0, 2 * T, 1));
-registerShortcut("RectangleLastTwoThirds", "Rectangle: Last Two Thirds", "Meta+Alt+T", place(T, 0, 2 * T, 1));
-registerShortcut("RectangleMaximize", "Rectangle: Maximize", "Meta+Alt+Return", maximize);
-registerShortcut("RectangleMaximizeHeight", "Rectangle: Maximize Height", "Meta+Alt+Shift+Up", maximizeHeight);
-registerShortcut("RectangleSmaller", "Rectangle: Make Smaller", "Meta+Alt+-", resizeBy(-RESIZE_STEP));
-registerShortcut("RectangleLarger", "Rectangle: Make Larger", "Meta+Alt+=", resizeBy(RESIZE_STEP));
-registerShortcut("RectangleCenter", "Rectangle: Center", "Meta+Alt+C", center);
-registerShortcut("RectangleRestore", "Rectangle: Restore", "Meta+Alt+Backspace", restore);
-registerShortcut("RectangleNextDisplay", "Rectangle: Next Display", "Meta+Alt+Ctrl+Right", moveToDisplay(1));
-registerShortcut("RectanglePrevDisplay", "Rectangle: Previous Display", "Meta+Alt+Ctrl+Left", moveToDisplay(-1));
+// Internal action names keep the original Rectangle* ids: they are the keys in
+// kglobalshortcutsrc, so changing them would orphan existing registrations.
+registerShortcut("RectangleLeftHalf", "Snap: Left Half", "Meta+Alt+Left", place(0, 0, 0.5, 1));
+registerShortcut("RectangleRightHalf", "Snap: Right Half", "Meta+Alt+Right", place(0.5, 0, 0.5, 1));
+registerShortcut("RectangleTopHalf", "Snap: Top Half", "Meta+Alt+Up", place(0, 0, 1, 0.5));
+registerShortcut("RectangleBottomHalf", "Snap: Bottom Half", "Meta+Alt+Down", place(0, 0.5, 1, 0.5));
+registerShortcut("RectangleTopLeft", "Snap: Top Left", "Meta+Alt+U", place(0, 0, 0.5, 0.5));
+registerShortcut("RectangleTopRight", "Snap: Top Right", "Meta+Alt+I", place(0.5, 0, 0.5, 0.5));
+registerShortcut("RectangleBottomLeft", "Snap: Bottom Left", "Meta+Alt+J", place(0, 0.5, 0.5, 0.5));
+registerShortcut("RectangleBottomRight", "Snap: Bottom Right", "Meta+Alt+K", place(0.5, 0.5, 0.5, 0.5));
+registerShortcut("RectangleFirstThird", "Snap: First Third", "Meta+Alt+D", place(0, 0, T, 1));
+registerShortcut("RectangleCenterThird", "Snap: Center Third", "Meta+Alt+F", place(T, 0, T, 1));
+registerShortcut("RectangleLastThird", "Snap: Last Third", "Meta+Alt+G", place(2 * T, 0, T, 1));
+registerShortcut("RectangleFirstTwoThirds", "Snap: First Two Thirds", "Meta+Alt+E", place(0, 0, 2 * T, 1));
+registerShortcut("RectangleCenterTwoThirds", "Snap: Center Two Thirds", "Meta+Alt+R", place(1 / 6, 0, 2 * T, 1));
+registerShortcut("RectangleLastTwoThirds", "Snap: Last Two Thirds", "Meta+Alt+T", place(T, 0, 2 * T, 1));
+registerShortcut("RectangleMaximize", "Snap: Maximize", "Meta+Alt+Return", maximize);
+registerShortcut("RectangleMaximizeHeight", "Snap: Maximize Height", "Meta+Alt+Shift+Up", maximizeHeight);
+registerShortcut("RectangleSmaller", "Snap: Make Smaller", "Meta+Alt+-", resizeBy(-RESIZE_STEP));
+registerShortcut("RectangleLarger", "Snap: Make Larger", "Meta+Alt+=", resizeBy(RESIZE_STEP));
+registerShortcut("RectangleCenter", "Snap: Center", "Meta+Alt+C", center);
+registerShortcut("RectangleRestore", "Snap: Restore", "Meta+Alt+Backspace", restore);
+registerShortcut("RectangleNextDisplay", "Snap: Next Display", "Meta+Alt+Ctrl+Right", moveToDisplay(1));
+registerShortcut("RectanglePrevDisplay", "Snap: Previous Display", "Meta+Alt+Ctrl+Left", moveToDisplay(-1));
