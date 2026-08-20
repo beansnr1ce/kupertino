@@ -15,7 +15,9 @@ git clone https://github.com/beansnr1ce/kupertino
 cd kupertino && ./install.sh
 ```
 
-The installer walks you through every feature below, then shows the resulting plan and asks you to **authorize each step individually** — package installs (keyd, and Spectacle if missing), the keyd config, each set of KDE bindings. Nothing touches your system until you approve it, the keyd config is validated with `keyd check` before it's installed, and a failed step aborts everything after it. Python 3 stdlib only; supports pacman, apt, dnf, and zypper.
+The installer walks you through every feature below, then shows the resulting plan and asks you to **authorize each step individually** — package installs (keyd, and Spectacle if missing), the keyd config, each set of KDE bindings. Nothing touches your system until you approve it, the keyd config is validated with `keyd check` before it's installed, and a failed step aborts everything after it. Python 3 stdlib only.
+
+**v1.0 targets CachyOS / Arch-based KDE Plasma** (verified end-to-end on a fresh Arch system). On other distros the installer still generates and validates configs, but skips package installs with a warning — install keyd yourself first. Known status from our container tests: openSUSE packages keyd; Fedora needs the `alternateved/keyd` COPR; **Ubuntu 24.04 LTS has no keyd package** (Ubuntu 24.10+/Debian 13 do).
 
 > ⚠️ A bad keyboard config can lock you out of your keyboard. keyd's panic exit is **Backspace+Escape+Enter** (terminates keyd, restoring plain keys). If you ever edit the config by hand: **never `keyd reload`** — it segfaults keyd 2.6.0 with layered configs; always `keyd check` then `sudo systemctl restart keyd`.
 

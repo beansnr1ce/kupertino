@@ -121,9 +121,13 @@ class TestBuildPlan(unittest.TestCase):
         plan = installer.build_plan(["remap"], make_system())
         self.assertEqual([s.id for s in plan.steps], ["pkg:keyd", "keyd-config"])
 
+        # Non-interactive on purpose: the user already authorized this exact
+        # step, and an interactive prompt deadlocks when stdin is piped
+        # (found in the 2026-08-20 container smoke tests).
         pkg = plan.steps[0]
         self.assertEqual(
-            pkg.commands, [["sudo", "pacman", "-S", "--needed", "keyd"]]
+            pkg.commands,
+            [["sudo", "pacman", "-S", "--needed", "--noconfirm", "keyd"]],
         )
 
         cfg = plan.steps[1]
@@ -179,13 +183,16 @@ class TestBuildPlanKdeSteps(unittest.TestCase):
             shots.commands,
         )
 
-    def test_missing_spectacle_on_apt_gets_install_step(self):
+    def test_non_pacman_manager_warns_and_skips_package_steps(self):
+        # v1.0 targets CachyOS/Arch (pacman). Elsewhere: warn, skip package
+        # installs, still proceed with the config steps. (2026-08-20 container
+        # smoke tests: Ubuntu 24.04 has no keyd package at all, Fedora needs a
+        # COPR — supporting those properly is future work.)
         system = make_system(package_manager="apt", installed_packages={"keyd"})
         plan = installer.build_plan(["remap", "screenshots"], system)
-        self.assertEqual(plan.steps[0].id, "pkg:spectacle")
-        self.assertEqual(
-            plan.steps[0].commands, [["sudo", "apt", "install", "spectacle"]]
-        )
+        self.assertNotIn("pkg:spectacle", [s.id for s in plan.steps])
+        self.assertTrue(any("spectacle" in w for w in plan.warnings))
+        self.assertIn("keyd-config", [s.id for s in plan.steps])
 
     def test_unknown_package_manager_warns_instead_of_crashing(self):
         system = make_system(package_manager=None)

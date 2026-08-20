@@ -283,11 +283,13 @@ FEATURE_PACKAGES = {
     "screenshots": ["spectacle"],
 }
 
+# v1.0 targets CachyOS/Arch. --noconfirm on purpose: the user authorized the
+# step already, and an interactive pacman prompt deadlocks on piped stdin
+# (2026-08-20 container smoke tests). Other distros verified so far:
+# openSUSE packages keyd; Fedora needs the alternateved/keyd COPR;
+# Ubuntu 24.04 LTS has no keyd package at all.
 PACKAGE_INSTALL = {
-    "pacman": ["sudo", "pacman", "-S", "--needed"],
-    "apt": ["sudo", "apt", "install"],
-    "dnf": ["sudo", "dnf", "install"],
-    "zypper": ["sudo", "zypper", "install"],
+    "pacman": ["sudo", "pacman", "-S", "--needed", "--noconfirm"],
 }
 
 
@@ -491,8 +493,9 @@ def build_plan(selections, system):
     for pkg in needed:
         if system.package_manager not in PACKAGE_INSTALL:
             plan.warnings.append(
-                f"No supported package manager found — install '{pkg}' "
-                "yourself before running the affected steps.")
+                f"kupertino v1.0 installs packages on CachyOS/Arch (pacman) "
+                f"only — install '{pkg}' yourself before the affected steps "
+                "run, or they will fail cleanly.")
             continue
         plan.steps.append(Step(
             id=f"pkg:{pkg}",
