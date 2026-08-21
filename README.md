@@ -4,7 +4,7 @@ macOS keyboard shortcuts for KDE Plasma. Bringing some of the best of macOS (usa
 
 ## What is kupertino?
 
-kupertino remaps the modifier row with [keyd](https://github.com/rvaiya/keyd) and configures KWin and Spectacle so common macOS shortcuts work on Plasma, and builds a macOS-style menu bar from stock Plasma widgets. No themes or icons — for macOS visuals, you can check out [MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde).
+kupertino remaps the modifier row with [keyd](https://github.com/rvaiya/keyd) and configures KWin and Spectacle so common macOS shortcuts work on Plasma, and builds a macOS-style menu bar from stock Plasma widgets. No themes or icons. For macOS visuals, you can check out [MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde).
 
 Built on and for CachyOS + KDE Plasma 6 (Wayland).
 
