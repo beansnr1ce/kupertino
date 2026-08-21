@@ -4,10 +4,10 @@ Thanks for the interest! This project is young — extracted from one working ma
 
 ## Where help is most wanted
 
-1. **Distro support beyond CachyOS/Arch.** v1.0 installs packages on pacman only; container smoke tests (2026-08-20) found openSUSE packages keyd, Fedora needs the `alternateved/keyd` COPR, and Ubuntu 24.04 LTS has no keyd package at all. PRs adding a distro's package step — with a real-machine test report — are gold. Open an issue with your distro, Plasma version, and what broke.
+1. **Distro support beyond CachyOS/Arch.** Open an issue with your distro, Plasma version, and what broke.
 2. **The installer.** `installer.py` (run via `./install.sh`) is stdlib-only Python, built test-first. Its functional core — keyd config assembly, plan building, the wizard, authorization, execution — is covered in `tests/test_installer.py`; the imperative shell (`detect_system`/`main`, real sudo/subprocess/D-Bus) is deliberately untested and verified by hand. Run the suite with `python3 -m unittest discover -s tests`. PRs touching the core should come with tests; expected values must come from a verified working config, not from re-running the code's own logic.
 3. **Cupertino Snap review.** `kwin-scripts/cupertino-snap/` is a self-contained KWin script; KWin-scripting expertise (multi-monitor edge cases, per-desktop behavior) is appreciated.
-4. **The launcher decision.** The ⌘Space Spotlight/Raycast slot is deliberately unfilled — comparisons of Vicinae, Albert, Ulauncher, tuned KRunner, and anything else worth considering are welcome as issues.
+4. **The launcher decision.** The ⌘Space Spotlight/Raycast slot is deliberately unfilled — comparisons of Vicinae, Albert, Ulauncher, tuned KRunner, and anything else worth considering are welcome as issues. May explore all of these as specific options to install as part of the script. 
 5. **Missing macOS behaviors.** Fullscreen-to-its-own-Space (⌃⌘F) is the biggest open item.
 
 ## Ground rules
