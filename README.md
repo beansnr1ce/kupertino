@@ -1,10 +1,12 @@
 # kupertino
 
-macOS keyboard shortcuts for KDE Plasma.
+macOS keyboard shortcuts for KDE Plasma. Bringing some of the best of macOS (usability) to CachyOS, for those of us who enjoy using (but maybe not the visuals of) the current iteration of macOS. 
 
-kupertino remaps the modifier row with [keyd](https://github.com/rvaiya/keyd) and configures KWin and Spectacle so common macOS shortcuts work on Plasma. It changes behavior only — no themes, icons, or panel changes. For macOS visuals, see [MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde).
+## What is kupertino?
 
-Built on CachyOS + KDE Plasma 6 (Wayland).
+kupertino remaps the modifier row with [keyd](https://github.com/rvaiya/keyd) and configures KWin and Spectacle so common macOS shortcuts work on Plasma. It changes behavior only — no themes, icons, or panel changes. For macOS visuals, you can check out [MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde).
+
+Built on and for CachyOS + KDE Plasma 6 (Wayland).
 
 ## Install
 
@@ -15,7 +17,7 @@ cd kupertino && ./install.sh
 
 The installer asks which features you want, then asks you to confirm each step before it runs. Requires Python 3.
 
-v1.0 supports and has been tested on CachyOS/Arch. 
+v1.0 supports and has been tested on CachyOS specifically.
 
 If a keyd config ever locks up your keyboard, press Backspace+Escape+Enter to kill keyd. Never use `keyd reload` (it segfaults keyd 2.6.0 with layered configs); run `keyd check`, then restart the service.
 
@@ -46,7 +48,7 @@ Planned: ⌘Space launcher, ⌃⌘F fullscreen. Implementation notes: [docs/kupe
 
 ## Cupertino Snap
 
-A KWin script (`kwin-scripts/cupertino-snap/`) implementing the default shortcuts of [Rectangle.app](https://github.com/rxhanson/rectangle) (not affiliated). With the keyd remap, ⌃⌥ is physical Ctrl+Super.
+A KWin script (`kwin-scripts/cupertino-snap/`) implementing the default shortcuts of [Rectangle.app](https://github.com/rxhanson/rectangle) (not affiliated). This is one of my favorite macOS usability enhancements, something I rely on daily, and which I found myself missing terribly after I moved to my main PC to CachyOS. With the keyd remap, ⌃⌥ is physical Ctrl+Super.
 
 | Action | ⌃⌥ + |
 |---|---|
