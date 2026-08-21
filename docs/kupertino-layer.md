@@ -4,8 +4,10 @@ The living implementation doc behind kupertino: every layer, every file touched,
 
 **Reference machine:** CachyOS, KDE Plasma 6.7.4 (Wayland), kernel `linux-cachyos`
 
-> **Scope note:** kupertino's scope is **keyboard shortcuts and muscle memory** (Layers 1–7 and 11). Layers 8–10 (desktop behaviors, btrfs snapshots, menu bar) are reference-machine extras documented for context — they are not part of the project.
-**Last updated:** 2026-08-20 (Cupertino Snap rename)
+> **Scope note:** kupertino's scope is **keyboard shortcuts, muscle memory, and the menu bar** (Layers 1–7, 10, and 11). Layers 8–9 (desktop behaviors, btrfs snapshots) are reference-machine extras documented for context — they are not part of the project.
+>
+> Layer 10 is **partly** in scope: the installer builds a simplified menu bar from stock Plasma widgets (global menu, expanding spacer, tray, clock). The bold app name and Dim Inactive below are reference-machine polish it does not install.
+**Last updated:** 2026-08-21 (menu bar in scope: `menubar` installer feature)
 
 ---
 
@@ -234,9 +236,17 @@ Recovery moves:
 
 Ops note: `limine-snapper-sync.service` shows *inactive* — expected. `inotify-tools` isn't installed, so it falls back to snapper plugin integration (CachyOS default): boot entries sync on every snapshot event anyway.
 
-## Layer 10: Menu bar polish + active-window visibility
+## Layer 10: Menu bar
 
-- **Bold app name in the menu bar** (macOS's **Finder** File Edit…) — third-party widget [Window Title Applet 6](https://github.com/dhruv8sh/plasma6-window-title-applet) (plugin id `org.kde.windowtitle`, the Plasma 6 continuation of psifidotos' applet), installed per-user via `kpackagetool6 -t Plasma/Applet -i` (lives in `~/.local/share/plasma/plasmoids/`, survives Plasma upgrades but is third-party code). Widget 92, leftmost on the top panel (`AppletOrder=92;49;75;72`), configured `txt=%a`, `isBold=true`, `noIcon=true`.
+**In scope, simplified.** The installer's `menubar` feature builds the panel from stock Plasma widgets only — Global Menu, expanding Panel Spacer, system tray, digital clock, in that order on a flush full-width top panel (`location=top`, `floating=false`, `lengthMode=fill`, `hiding=none`, height 27). It is created through plasmashell's `evaluateScript` D-Bus API, and **skipped entirely if a top panel already exists** (`has_top_panel()` parses `plasma-org.kde.plasma.desktop-appletsrc` for a containment with `plugin=org.kde.panel` and `location=3`), so it never fights a layout the user already has.
+
+Why creation order matters: `addWidget()` appends and Plasma exposes **no reorder API** — rearranging an existing panel means stopping plasmashell and editing `AppletOrder` by hand. So the script only ever builds a fresh panel, where creation order *is* panel order.
+
+The rest of this layer is reference-machine polish the installer does **not** install:
+
+- **Bold app name in the menu bar** (macOS's **Finder** File Edit…) — third-party widget [Window Title Applet 6](https://github.com/dhruv8sh/plasma6-window-title-applet) (plugin id `org.kde.windowtitle`, the Plasma 6 continuation of psifidotos' applet), installed per-user via `kpackagetool6 -t Plasma/Applet -i` (lives in `~/.local/share/plasma/plasmoids/`, survives Plasma upgrades but is third-party code). Widget 92, leftmost on the top panel (`AppletOrder=92;49;93;75;72`), configured `txt=%a`, `isBold=true`, `noIcon=true`.
+  - **Patched (2026-08-21):** the widget's `main.qml` line 12 imported `org.kde.plasma.private.appmenu`, a QML module Plasma 6.7 no longer ships — the Global Menu applet is now the C++ plugin `/usr/lib/qt6/plugins/plasma/applets/org.kde.plasma.appmenu.so`, with no accompanying QML plugin. The import was **unused** (`AppMenuPrivate` is referenced nowhere else in the package), so plasmashell logged `module "org.kde.plasma.private.appmenu" is not installed` on every load. Fix: delete that import line, restart plasmashell (`systemctl --user restart plasma-plasmashell.service`). Backup at `main.qml.bak-appmenu`. **Reapply after any widget reinstall or update** until upstream drops the import.
+- **Expanding panel spacer pins the tray right** (widget 93, `org.kde.plasma.panelspacer`, `[Configuration][General] expanding=true`, sitting between global menu and system tray). Without it the tray and clock slid left whenever the focused app exported no global menu: the Global Menu applet declares `Plasmoid.constraintHints: Plasmoid.CanFillArea`, so it was the element soaking up the panel's free space — and when `menuAvailable` is false it collapses to zero width and takes that free space with it. Steam is the everyday trigger (draws its own in-window menu bar, exports nothing over D-Bus), same root cause as the Electron/Chromium limitation below. The spacer makes the layout independent of whether any menu is present.
 - **Top panel de-floated** — mac menu bar is flush and full-width, not a hovering pill: `plasmashellrc` `[PlasmaViews][Panel 48]` `floating=0`. The bottom dock stays floating — the mac Dock *does* float.
 - **Active window pops** — KWin **Dim Inactive** effect: unfocused windows dim 20%, so focus is always obvious (something macOS itself no longer does well). `kwinrc` `[Plugins] diminactiveEnabled=true`, `[Effect-diminactive] Strength=20`, panels/desktop/keep-above excluded.
 - **Global-menu limitation (inherent):** menus only appear for apps that export them — Qt/KDE and most GTK apps do (`appmenu-gtk-module` installed); Chromium/Electron apps (Brave, LocalSend) never will, on any Linux.
@@ -305,6 +315,9 @@ Not everything should be mac-like. Choices that intentionally break the metaphor
 
 ## Changelog
 
+- **2026-08-21** — **Menu bar brought into project scope**, simplified: new `menubar` installer feature builds a flush full-width top panel from stock Plasma widgets (global menu, expanding spacer, tray, clock) via plasmashell's `evaluateScript`, skipping cleanly when a top panel already exists. Pulls in `appmenu-gtk-module` so GTK apps export menus. Deliberately excludes the reference machine's third-party Window Title Applet — that's the piece that needed patching twice this week. Scope notes in this doc and CONTRIBUTING.md updated; panels are now in scope, but only this panel.
+- **2026-08-21** — Fixed the reference machine's menu bar: added an expanding panel spacer (widget 93) so the tray and clock stay right-aligned when the focused app exports no global menu (Steam, Electron apps) — the Global Menu applet declares `CanFillArea` and had been the panel's only stretching element, so it dragged the free space away with it when it collapsed. Ops note confirmed again: adding the widget needed plasmashell stopped, `AppletOrder` edited, then restarted.
+- **2026-08-21** — Patched the Window Title Applet (Layer 10): removed its dead `org.kde.plasma.private.appmenu` import, which Plasma 6.7 no longer ships (the Global Menu applet became a C++-only plugin), so plasmashell stopped logging `module ... is not installed` on every load. Reference-machine fix only — the menu bar is not kupertino scope.
 - **2026-08-20** — Renamed the KWin script **Cupertino Rectangle → Cupertino Snap** (package id `cupertino-snap`, labels "Snap: …"; internal `Rectangle*` action ids unchanged so shortcut registrations survive). Prompted by a naming/trademark research pass ([rectangle-naming-research.md](rectangle-naming-research.md)): descriptive "Rectangle.app-compatible" references are nominative fair use and stay; the name itself was the cautious rename. Structure decision: the script **stays in this repo** (no spin-out, no umbrella) — a KDE Store listing can publish straight from the subdirectory.
 - **2026-08-19** — Layer 11 Rectangle: all 22 of Rectangle.app's default shortcuts on physical Ctrl+Super via a custom KWin script (Cupertino Rectangle) + keyd composite layers. Debugging surfaced two classics: `Qt.rect()` silently doesn't exist in KWin JS, and keyd 2.6 composite layers can't carry modifier tags (every chord key mapped explicitly instead). Quick-tile restored to physical Ctrl+Alt+arrows.
 - **2026-08-19** — Layer 10 menu bar polish: bold app name leftmost in the menu bar (Window Title Applet 6, widget 92), top panel de-floated (flush like a real menu bar; dock stays floating), KWin Dim Inactive at 20% so the focused window is unmistakable, KDE Connect uninstalled (LocalSend won). Documented the Electron/Chromium global-menu limitation.

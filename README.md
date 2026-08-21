@@ -4,7 +4,7 @@ macOS keyboard shortcuts for KDE Plasma. Bringing some of the best of macOS (usa
 
 ## What is kupertino?
 
-kupertino remaps the modifier row with [keyd](https://github.com/rvaiya/keyd) and configures KWin and Spectacle so common macOS shortcuts work on Plasma. It changes behavior only — no themes, icons, or panel changes. For macOS visuals, you can check out [MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde).
+kupertino remaps the modifier row with [keyd](https://github.com/rvaiya/keyd) and configures KWin and Spectacle so common macOS shortcuts work on Plasma, and builds a macOS-style menu bar from stock Plasma widgets. No themes or icons — for macOS visuals, you can check out [MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde).
 
 Built on and for CachyOS + KDE Plasma 6 (Wayland).
 
@@ -44,7 +44,26 @@ KDE shortcuts and the Snap script are configured in post-remap terms on top of t
 - ⌘, preferences; ⌘C/⌘V in Konsole (Ctrl-C still interrupts)
 - Window snapping via Cupertino Snap (below)
 
+Plus the menu bar (below).
+
 Planned: ⌘Space launcher, ⌃⌘F fullscreen. Implementation notes: [docs/kupertino-layer.md](docs/kupertino-layer.md).
+
+## Menu bar
+
+An optional top panel that behaves like macOS's menu bar: the focused app's menus on the left, system tray and clock on the right, flush and full-width rather than a floating pill. Stock Plasma widgets only — no third-party plasmoids to break on upgrade.
+
+The installer **skips this step if you already have a top panel**, so it won't disturb an existing layout. To build it by hand, add these to a top panel in this order:
+
+| Widget | Why |
+|---|---|
+| Global Menu | The menus themselves |
+| Panel Spacer (**expanding**) | Pins everything after it to the right |
+| System Tray | Also hosts Plasma's notification service |
+| Digital Clock | Right corner, like macOS |
+
+The expanding spacer is not optional. The Global Menu applet is the panel's only naturally stretching element, so without a spacer the tray and clock slide left whenever the focused app exports no menu.
+
+Apps that draw their own in-window menu bar — Steam, and Chromium/Electron apps generally — will never populate it. That's a Linux-wide limitation, not a kupertino one. GTK apps need `appmenu-gtk-module`, which the installer pulls in.
 
 ## Cupertino Snap
 

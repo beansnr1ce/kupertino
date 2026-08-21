@@ -194,6 +194,10 @@ FEATURES = [
     Feature("rectangle", "Cupertino Snap window management",
             "All 22 Rectangle.app-compatible shortcuts on ⌃⌥ (physical Ctrl+Super): "
             "halves, corners, thirds, maximize, center, restore, displays."),
+    Feature("menubar", "macOS menu bar",
+            "A flush, full-width top panel: the focused app's menus on the "
+            "left, system tray and clock on the right. Stock Plasma widgets "
+            "only. Skipped if you already have a top panel."),
 ]
 
 
@@ -261,6 +265,7 @@ class SystemState:
     home: str
     repo_root: str
     konsole_sessionui_exists: bool
+    top_panel_exists: bool
 
 
 @dataclass
@@ -281,6 +286,9 @@ class Plan:
 FEATURE_PACKAGES = {
     "remap": ["keyd"],
     "screenshots": ["spectacle"],
+    # Qt/KDE apps export their menus over D-Bus unaided; GTK apps need this
+    # module or the menu bar stays empty for them.
+    "menubar": ["appmenu-gtk-module"],
 }
 
 # v1.0 targets CachyOS/Arch. --noconfirm on purpose: the user authorized the
@@ -471,12 +479,89 @@ def _rectangle_step(system, plan):
     )
 
 
+# The simplified menu bar: stock Plasma widgets only, in mac order — Global
+# Menu, expanding spacer, system tray, clock. The spacer is the load-bearing
+# part: the Global Menu applet declares Plasmoid.CanFillArea, so without a
+# spacer it is the panel's only expanding element, and when the focused app
+# exports no menu (Steam, Electron apps) it collapses to zero width and drags
+# the tray and clock left with it.
+#
+# Height 27 and the flush/full-width geometry are the reference machine's.
+# addWidget() appends, so creation order *is* the panel order — there is no
+# reorder API (rearranging an existing panel means stopping plasmashell and
+# editing AppletOrder by hand), which is why this only ever builds a new panel.
+MENUBAR_PANEL_SCRIPT = """\
+var top = panels().filter(function (p) { return p.location == "top"; });
+if (top.length) {
+    print("kupertino: a top panel already exists - left untouched");
+} else {
+    var panel = new Panel("org.kde.panel");
+    panel.location = "top";
+    panel.height = 27;
+    panel.alignment = "center";
+    panel.lengthMode = "fill";
+    panel.hiding = "none";
+    panel.floating = false;
+    panel.addWidget("org.kde.plasma.appmenu");
+    var spacer = panel.addWidget("org.kde.plasma.panelspacer");
+    spacer.currentConfigGroup = ["General"];
+    spacer.writeConfig("expanding", true);
+    panel.addWidget("org.kde.plasma.systemtray");
+    panel.addWidget("org.kde.plasma.digitalclock");
+}
+"""
+
+
+def has_top_panel(appletsrc_text):
+    """True if the Plasma applet config already declares a top-edge panel.
+
+    Containment groups carry `plugin=org.kde.panel` plus a `location=` key —
+    3 is the top edge, 4 the bottom. Applet subgroups carry a `plugin=` too,
+    but never `org.kde.panel`, so resetting at every group header is enough.
+    """
+    def is_top_panel(plugin, location):
+        return plugin == "org.kde.panel" and location == "3"
+
+    found = False
+    plugin = location = None
+    for line in appletsrc_text.splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            found = found or is_top_panel(plugin, location)
+            plugin = location = None
+        elif line.startswith("plugin="):
+            plugin = line.split("=", 1)[1]
+        elif line.startswith("location="):
+            location = line.split("=", 1)[1]
+    return found or is_top_panel(plugin, location)
+
+
+def _menubar_step(system, plan):
+    if system.top_panel_exists:
+        plan.warnings.append(
+            "You already have a top panel — the menu bar step is skipped so "
+            "your layout isn't disturbed. To do it by hand, add the Global "
+            "Menu, a Panel Spacer set to expanding, the system tray and a "
+            "clock, in that order.")
+        return None
+    return Step(
+        id="menubar",
+        description="Create the macOS menu bar: a flush, full-width top panel "
+                    "with the Global Menu, an expanding spacer, the system "
+                    "tray and a clock",
+        commands=[["qdbus6", "org.kde.plasmashell", "/PlasmaShell",
+                   "org.kde.PlasmaShell.evaluateScript",
+                   MENUBAR_PANEL_SCRIPT]],
+    )
+
+
 KDE_STEP_BUILDERS = {
     "cmdq": _cmdq_step,
     "rectangle": _rectangle_step,
     "screenshots": _screenshots_step,
     "spaces": _spaces_step,
     "appconv": _appconv_step,
+    "menubar": _menubar_step,
 }
 
 
@@ -540,7 +625,11 @@ def detect_system():
         (m for m in ("pacman", "apt", "dnf", "zypper") if shutil.which(m)),
         None)
     installed = {p for p in ("keyd", "spectacle") if shutil.which(p)}
+    # appmenu-gtk-module ships no binary, so which() can't see it.
+    if Path("/usr/lib/gtk-3.0/modules/libappmenu-gtk-module.so").exists():
+        installed.add("appmenu-gtk-module")
     sessionui = Path(home) / ".local/share/kxmlgui5/konsole/sessionui.rc"
+    appletsrc = Path(home) / ".config/plasma-org.kde.plasma.desktop-appletsrc"
     return SystemState(
         package_manager=manager,
         installed_packages=installed,
@@ -548,6 +637,8 @@ def detect_system():
         home=home,
         repo_root=str(Path(__file__).resolve().parent),
         konsole_sessionui_exists=sessionui.exists(),
+        top_panel_exists=(appletsrc.exists()
+                          and has_top_panel(appletsrc.read_text())),
     )
 
 

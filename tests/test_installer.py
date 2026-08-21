@@ -111,6 +111,7 @@ def make_system(**kw):
         home="/home/u",
         repo_root="/repo",
         konsole_sessionui_exists=False,
+        top_panel_exists=False,
     )
     defaults.update(kw)
     return installer.SystemState(**defaults)
@@ -296,6 +297,144 @@ class TestBuildPlanKdeSteps(unittest.TestCase):
         )
 
 
+class TestHasTopPanel(unittest.TestCase):
+    """Groups are flat in appletsrc; only containments carry location=."""
+
+    TOP_PANEL = """\
+[Containments][48]
+formfactor=2
+location=3
+plugin=org.kde.panel
+"""
+
+    BOTTOM_PANEL = """\
+[Containments][23]
+formfactor=2
+location=4
+plugin=org.kde.panel
+"""
+
+    def test_detects_top_edge_panel(self):
+        self.assertTrue(installer.has_top_panel(self.TOP_PANEL))
+
+    def test_bottom_panel_alone_is_not_a_top_panel(self):
+        self.assertFalse(installer.has_top_panel(self.BOTTOM_PANEL))
+
+    def test_finds_top_panel_after_a_bottom_one(self):
+        self.assertTrue(
+            installer.has_top_panel(self.BOTTOM_PANEL + self.TOP_PANEL))
+
+    def test_applet_subgroups_never_count_as_panels(self):
+        # The system tray is a containment-in-applet: it has its own plugin=
+        # line, so a parser that doesn't reset per group could confuse it
+        # with the panel it sits in.
+        config = self.BOTTOM_PANEL + """
+[Containments][23][Applets][75]
+plugin=org.kde.plasma.systemtray
+
+[Containments][23][Applets][75][Applets][78]
+plugin=org.kde.plasma.clipboard
+"""
+        self.assertFalse(installer.has_top_panel(config))
+
+    def test_no_panels_at_all(self):
+        self.assertFalse(installer.has_top_panel(""))
+
+
+class TestMenuBarStep(unittest.TestCase):
+    def _script(self, plan):
+        step = plan.steps[-1]
+        self.assertEqual(step.id, "menubar")
+        self.assertEqual(step.commands[0][:4],
+                         ["qdbus6", "org.kde.plasmashell", "/PlasmaShell",
+                          "org.kde.PlasmaShell.evaluateScript"])
+        return step.commands[0][4]
+
+    def test_builds_panel_with_widgets_in_mac_order(self):
+        # addWidget() appends and Plasma has no reorder API, so the order
+        # these calls appear in *is* the resulting panel order.
+        plan = installer.build_plan(
+            ["remap", "menubar"],
+            make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
+        )
+        script = self._script(plan)
+        positions = [
+            script.index('addWidget("org.kde.plasma.appmenu")'),
+            script.index('addWidget("org.kde.plasma.panelspacer")'),
+            script.index('addWidget("org.kde.plasma.systemtray")'),
+            script.index('addWidget("org.kde.plasma.digitalclock")'),
+        ]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_spacer_is_expanding(self):
+        # Load-bearing: the Global Menu applet declares CanFillArea, so
+        # without an expanding spacer it is the panel's only stretching
+        # element and the tray slides left whenever an app (Steam, Electron)
+        # exports no menu.
+        plan = installer.build_plan(
+            ["remap", "menubar"],
+            make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
+        )
+        script = self._script(plan)
+        self.assertIn('spacer.currentConfigGroup = ["General"];', script)
+        self.assertIn('spacer.writeConfig("expanding", true);', script)
+
+    def test_panel_is_flush_and_full_width(self):
+        plan = installer.build_plan(
+            ["remap", "menubar"],
+            make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
+        )
+        script = self._script(plan)
+        for setting in ('panel.location = "top";',
+                        'panel.floating = false;',
+                        'panel.lengthMode = "fill";',
+                        'panel.hiding = "none";'):
+            self.assertIn(setting, script)
+
+    def test_script_refuses_to_add_a_second_top_panel(self):
+        # Belt and braces behind the plan-time skip below: detection reads a
+        # config file, this asks the running shell.
+        plan = installer.build_plan(
+            ["remap", "menubar"],
+            make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
+        )
+        script = self._script(plan)
+        self.assertIn('panels().filter(function (p) { return p.location == "top"; })',
+                      script)
+        self.assertLess(script.index("if (top.length)"),
+                        script.index("new Panel("))
+
+    def test_existing_top_panel_is_left_alone_with_a_warning(self):
+        plan = installer.build_plan(
+            ["remap", "menubar"],
+            make_system(installed_packages={"keyd", "appmenu-gtk-module"},
+                        top_panel_exists=True),
+        )
+        self.assertNotIn("menubar", [s.id for s in plan.steps])
+        self.assertTrue(any("top panel" in w for w in plan.warnings))
+
+    def test_pulls_in_gtk_menu_export_module(self):
+        # Qt/KDE apps export menus unaided; GTK apps need the module or the
+        # menu bar is empty for them.
+        plan = installer.build_plan(["remap", "menubar"],
+                                    make_system(installed_packages={"keyd"}))
+        self.assertEqual(plan.steps[0].id, "pkg:appmenu-gtk-module")
+        self.assertEqual(
+            plan.steps[0].commands,
+            [["sudo", "pacman", "-S", "--needed", "--noconfirm",
+              "appmenu-gtk-module"]],
+        )
+
+    def test_menubar_alone_does_not_disturb_keyd_config(self):
+        plan = installer.build_plan(
+            ["remap", "menubar"],
+            make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
+        )
+        self.assertEqual([s.id for s in plan.steps],
+                         ["keyd-config", "menubar"])
+
+
+
 def scripted(answers):
     prompts = []
     feed = iter(answers)
@@ -309,15 +448,15 @@ def scripted(answers):
 
 class TestWizard(unittest.TestCase):
     def test_all_yes_selects_every_feature_in_walk_order(self):
-        ask, prompts = scripted(["y"] * 8)
+        ask, prompts = scripted(["y"] * 9)
         said = []
         selections = installer.run_wizard(installer.FEATURES, ask, said.append)
         self.assertEqual(
             selections,
             ["remap", "textnav", "cmdtab", "cmdq", "screenshots",
-             "spaces", "appconv", "rectangle"],
+             "spaces", "appconv", "rectangle", "menubar"],
         )
-        self.assertEqual(len(prompts), 8)
+        self.assertEqual(len(prompts), 9)
 
     def test_declining_remap_ends_walk_with_nothing_selected(self):
         ask, prompts = scripted(["n"])
@@ -328,12 +467,12 @@ class TestWizard(unittest.TestCase):
         self.assertTrue(any("foundation" in s.lower() for s in said))
 
     def test_garbage_answer_reprompts_same_feature(self):
-        ask, prompts = scripted(["maybe", "y"] + ["n"] * 7)
+        ask, prompts = scripted(["maybe", "y"] + ["n"] * 8)
         selections = installer.run_wizard(
             installer.FEATURES, ask, lambda s: None
         )
         self.assertEqual(selections, ["remap"])
-        self.assertEqual(len(prompts), 9)
+        self.assertEqual(len(prompts), 10)
 
 
 class TestAuthorizePlan(unittest.TestCase):
