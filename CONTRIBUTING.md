@@ -13,9 +13,9 @@ Thanks for the interest! This project is young — extracted from one working ma
 ## Ground rules
 
 - **Read [docs/kupertino-layer.md](docs/kupertino-layer.md) first.** It explains every decision and documents the traps (keyd composite layers can't carry modifier tags; `Qt.rect()` doesn't exist in KWin JS; Qt arrow keycodes are Left/Up/Right/Down, not Left/Right adjacent; `keyd reload` segfaults 2.6.0 with layered configs). Don't re-lose battles that are already won.
-- **Keyboard shortcuts, muscle memory, and the menu bar — that's the whole scope.** Theming PRs (icons, cursors, window decorations) are out of scope, and so are non-keyboard features (snapshots/backup, file sharing). The implementation notes mention some of those as reference-machine context; that doesn't make them project scope.
-- **The menu bar is the one panel exception.** kupertino builds a top panel because macOS's menu bar is muscle memory, not decoration — but only that panel, only from stock Plasma widgets, and only when the user has no top panel already. Dock layouts, widget theming, and third-party plasmoids stay out.
-- **Every change reversible and documented** — one config file or one setting where possible, with the file it touches and why noted in the docs.
+- **Keyboard shortcuts, muscle memory, and the Kupertino Global Theme — that's the whole scope.** The theme (`look-and-feel/`) is Breeze Dark plus the menu bar and dock layout. macOS look-alike visuals (icons, cursors, window decorations) are out of scope, since MacTahoe and WhiteSur already do that well and Kupertino is meant to switch cleanly with them. Non-keyboard features (snapshots/backup, file sharing) are also out. The implementation notes mention some of those as reference-machine context; that doesn't make them project scope.
+- **The layout stays stock.** The theme's panels use stock Plasma widgets only. Third-party plasmoids and widget theming stay out.
+- **Every change reversible and documented** — one config file or one setting where possible, with the file it touches and why noted in the docs. Anything new the installer writes needs a matching revert in `build_uninstall_plan`, keyed on kupertino's exact value so user changes survive.
 - **Layer discipline.** Key remapping happens once, in keyd. Everything above configures in post-remap terms. PRs that fight the remap instead of adapting to it will be asked to restructure.
 
 ## Testing keyd changes safely

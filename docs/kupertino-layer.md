@@ -4,10 +4,11 @@ The living implementation doc behind kupertino: every layer, every file touched,
 
 **Reference machine:** CachyOS, KDE Plasma 6.7.4 (Wayland), kernel `linux-cachyos`
 
-> **Scope note:** kupertino's scope is **keyboard shortcuts, muscle memory, and the menu bar** (Layers 1–7, 10, and 11). Layers 8–9 (desktop behaviors, btrfs snapshots) are reference-machine extras documented for context — they are not part of the project.
+> **Scope note:** kupertino's scope is **keyboard shortcuts, muscle memory, and the Kupertino Global Theme** (Layers 1–7, 10, and 11). Layers 8–9 (desktop behaviors, btrfs snapshots) are reference-machine extras documented for context — they are not part of the project.
 >
-> Layer 10 is **partly** in scope: the installer builds a simplified menu bar from stock Plasma widgets (global menu, expanding spacer, tray, clock). The bold app name and Dim Inactive below are reference-machine polish it does not install.
-**Last updated:** 2026-08-21 (menu bar in scope: `menubar` installer feature)
+> Layer 10 is **partly** in scope: the Global Theme ships a simplified menu bar from stock Plasma widgets (global menu, expanding spacer, tray, clock) plus a dock. The bold app name and Dim Inactive below are reference-machine polish it does not install.
+
+**Last updated:** 2026-10-24 (menu bar becomes a Global Theme; `./uninstall.sh`)
 
 ---
 
@@ -77,7 +78,31 @@ keyd sits below everything, so **every application and KDE setting sees the swap
 
 **Rule of thumb: to bind something to the physical ⌘-position key, configure it as `Ctrl+…` in KDE / the app.** Shortcuts shown in KDE System Settings are in *post-remap* terms, not physical keys.
 
-Side effects of physical Ctrl emitting Meta: all KWin shortcuts (`Meta+W` overview, `Meta+D` peek desktop, `Meta+Tab` window walk, …) sit on the physical Ctrl key, and a bare Ctrl tap opens the Kickoff menu (KDE's Meta-tap binding).
+Side effects of physical Ctrl emitting Meta: all KWin shortcuts (`Meta+W` overview, `Meta+D` peek desktop, `Meta+Tab` window walk, …) sit on the physical Ctrl key, and a bare Ctrl tap fires KDE's Meta-tap binding — Kickoff covers the screen. That one bites hard in games, where Ctrl is an ordinary key (crouch), and macOS has nothing like it, so the installer clears it unconditionally as part of the remap (step `metatap`).
+
+⚠️ **Two independent bindings put Kickoff on a bare Meta tap, and killing one is not enough** — clearing only KWin's left it firing (2026-08-22):
+
+```bash
+# 1. KWin's modifier-only shortcut
+kwriteconfig6 --file kwinrc --group ModifierOnlyShortcuts --key Meta ""
+qdbus6 org.kde.KWin /KWin reconfigure
+
+# 2. plasmashell's real global shortcut on bare Meta — the one that actually fires.
+#    The line is `activate application launcher=<active>,<default>,<friendly name>`;
+#    drop Meta from the *active* (first) field only, so KDE's "reset to defaults"
+#    still restores stock behavior. Component is `plasmashell`, not a
+#    `services`/.desktop entry — so no `--group services`.
+kwriteconfig6 --file kglobalshortcutsrc --group plasmashell \
+  --key "activate application launcher" \
+  "Alt+F1,Meta\tAlt+F1,Activate Application Launcher"
+busctl --user call org.kde.kglobalaccel /kglobalaccel org.kde.KGlobalAccel \
+  setForeignShortcut asai 4 "plasmashell" "activate application launcher" "" "" \
+  1 150994992   # Alt+F1 = 0x09000030
+```
+
+Verify with `globalShortcutsByKey` on `16777250` (Qt `Key_Meta`): it should report **0** registrations. Querying Alt+F1 still lists Meta in the trailing *default* array — that's the stored default, not what's active.
+
+Kickoff stays reachable on `Alt+F1` (= **physical Win+F1**) and from any launcher widget on a panel. To restore the tap, put `Meta\tAlt+F1` back in the active field, re-run `setForeignShortcut` with both keycodes, and set the kwinrc key back to `org.kde.plasmashell,/PlasmaShell,org.kde.PlasmaShell,activateLauncherMenu`.
 
 ## Layer 2: App launcher (Spotlight equivalent) — not in kupertino yet
 
@@ -238,9 +263,13 @@ Ops note: `limine-snapper-sync.service` shows *inactive* — expected. `inotify-
 
 ## Layer 10: Menu bar
 
-**In scope, simplified.** The installer's `menubar` feature builds the panel from stock Plasma widgets only — Global Menu, expanding Panel Spacer, system tray, digital clock, in that order on a flush full-width top panel (`location=top`, `floating=false`, `lengthMode=fill`, `hiding=none`, height 27). It is created through plasmashell's `evaluateScript` D-Bus API, and **skipped entirely if a top panel already exists** (`has_top_panel()` parses `plasma-org.kde.plasma.desktop-appletsrc` for a containment with `plugin=org.kde.panel` and `location=3`), so it never fights a layout the user already has.
+**In scope, as a Global Theme.** The menu bar ships as the layout of a Plasma Global Theme, `look-and-feel/io.github.beansnr1ce.kupertino/`: Breeze Dark visuals (`contents/defaults`) and a layout script that builds the menu bar from stock Plasma widgets — Global Menu, expanding Panel Spacer, system tray, digital clock, in that order on a flush full-width top panel (`location=top`, `floating=false`, `lengthMode=fill`, `hiding=none`, height 27) — plus the reference machine's dock (Kickoff, icon task manager, separator, show desktop; bottom, centered, fit width, 50px).
 
-Why creation order matters: `addWidget()` appends and Plasma exposes **no reorder API** — rearranging an existing panel means stopping plasmashell and editing `AppletOrder` by hand. So the script only ever builds a fresh panel, where creation order *is* panel order.
+Why a Global Theme (2026-10-24): the menu bar used to be a panel the installer built by hand through plasmashell's `evaluateScript`. Applying another Global Theme with its layout (WhiteSur, 2026-10-23) wiped it, and the installer's skip-if-a-top-panel-exists check then refused to bring it back — kupertino and the other theme were fighting over the same panels. As a theme of its own, kupertino takes part in Plasma's switcher instead: pick Kupertino or anything else in **System Settings → Global Theme**, and the layout swaps cleanly either way.
+
+The installer's `theme` feature copies the package to `~/.local/share/plasma/look-and-feel/`, backs up `plasma-org.kde.plasma.desktop-appletsrc`, `plasmashellrc` and the current `LookAndFeelPackage` to `~/.local/state/kupertino/before/` (**once** — a reinstall never overwrites the pre-kupertino backup with kupertino's own layout), then runs `plasma-apply-lookandfeel -a io.github.beansnr1ce.kupertino --resetLayout`. Without `--resetLayout` only the visuals change and no menu bar appears.
+
+Why creation order matters: `addWidget()` appends and Plasma exposes **no reorder API** — rearranging an existing panel means stopping plasmashell and editing `AppletOrder` by hand. The layout script only ever builds fresh panels, where creation order *is* panel order.
 
 The rest of this layer is reference-machine polish the installer does **not** install:
 
@@ -301,9 +330,22 @@ Not everything should be mac-like. Choices that intentionally break the metaphor
 - **CachyOS launcher button on the dock** (2026-08-18): an Application Launcher (Kickoff, `org.kde.plasma.kickoff`) with the CachyOS logo (`/usr/share/icons/cachyos.svg`, icon name `cachyos`) sits at the left end of the bottom panel — too much functionality behind it to hide. Widget id 74 in `~/.config/plasma-org.kde.plasma.desktop-appletsrc`, containment 23. Same menu also opens on a bare physical-Ctrl tap (Meta tap binding).
   - Ops note: widgets can be added live via `qdbus6 org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript`, but *reordering* requires stopping plasmashell, editing `AppletOrder`, and starting it again — plasmashell rewrites the config from memory on shutdown, so edit only while it's stopped and match lines by content, not line number.
 
+## Uninstall
+
+`./uninstall.sh` (`installer.py --uninstall`) is **stateless**: installs from before it existed kept no record, so it reads the live config and reverts only what still carries kupertino's exact value. A shortcut you've changed since, a keyd config without kupertino's `leftalt = layer(cmd)` line, or a Konsole `sessionui.rc` that isn't kupertino's are all left alone. Every step is authorized individually, like install. In order:
+
+1. **`theme-restore`**, only if Kupertino is the *active* Global Theme: re-applies the backed-up previous theme, then restores the backed-up panel files with plasmashell stopped (it rewrites its config on exit). No backup → the previous theme (or Breeze) with `--resetLayout`. If another theme is active — you've moved on to WhiteSur — your look is left alone.
+2. **`theme-remove`**: deletes the theme package and `~/.local/state/kupertino/`.
+3. **`snap`**: disables and deletes Cupertino Snap. Runs before the shortcut reset so the script releases the `Meta+Alt` chords Plasma's defaults need back.
+4. **`shortcuts`**: resets each of the 20 bindings kupertino writes to Plasma's default — the middle field of `[kwin]`-style entries; Spectacle's `[services]` entries carry no default, so those come from `X-KDE-Shortcuts` in its `.desktop` file (`SPECTACLE_DEFAULTS`). Deletes `kwinrc [ModifierOnlyShortcuts] Meta`, bringing back the bare-Meta launcher tap.
+5. **`konsole-copy-paste`**: removes the override.
+6. **`keyd-config`**: removes `/etc/keyd/default.conf`; restarts keyd if other configs remain in `/etc/keyd/`, otherwise disables it.
+
+Left in place: packages (keyd, spectacle, appmenu-gtk-module), the extra virtual desktops, and the Cupertino Snap actions' stale entries in `kglobalshortcutsrc` (inert once the script is gone; kglobalaccel's per-component `cleanUp` would also drop other inactive KWin shortcuts, so it isn't called).
+
 ## Considered, not implemented: visual theming (MacTahoe)
 
-[vinceliuice/MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde) (2026-08-19): the full macOS Tahoe visual kit for Plasma — Plasma style, traffic-light window decorations, color schemes, Kvantum, SDDM, wallpapers, companion icon/cursor repos, optional blur (kwin-effects-forceblur, 24px corners). Decided to **stay behavior-only** — this project's philosophy holds. Logged as the go-to if that ever changes. Notes from vetting: `install.sh` only copies files (safe, applies nothing); if ever applied, use individual components — applying it as a Global Theme with "desktop layout" checked would rebuild the panels and destroy the menu-bar/dock setup.
+[vinceliuice/MacTahoe-kde](https://github.com/vinceliuice/MacTahoe-kde) (2026-08-19): the full macOS Tahoe visual kit for Plasma — Plasma style, traffic-light window decorations, color schemes, Kvantum, SDDM, wallpapers, companion icon/cursor repos, optional blur (kwin-effects-forceblur, 24px corners). Decided against shipping it. Logged as the go-to if that ever changes. (2026-10-24: kupertino now ships its own Global Theme, but only as Breeze Dark plus the menu bar and dock layout — still no macOS visuals of its own.) Notes from vetting: `install.sh` only copies files (safe, applies nothing); if ever applied, use individual components — applying it as a Global Theme with "desktop layout" checked would rebuild the panels and destroy the menu-bar/dock setup.
 
 ## Known gaps / future work
 
@@ -315,6 +357,8 @@ Not everything should be mac-like. Choices that intentionally break the metaphor
 
 ## Changelog
 
+- **2026-10-24** — **The menu bar became a Plasma Global Theme, and kupertino gained `./uninstall.sh`.** Trigger: trying WhiteSur — its Global Theme layout replaced kupertino's hand-built menu bar, and the installer's skip-if-a-top-panel-exists check then refused to rebuild it. The `menubar` feature is now `theme`: the `io.github.beansnr1ce.kupertino` look-and-feel package (Breeze Dark, menu bar, dock), applied with `--resetLayout` after a once-only backup of the panels and previous theme. `has_top_panel()` and the `evaluateScript` panel builder are gone. Uninstall reverts only what still carries kupertino's values (see Uninstall), so it works on installs from before it existed. `qt_keycode` learned bare `Meta` (16777250) to restore the launcher tap.
+- **2026-08-22** — A bare physical-Ctrl tap no longer opens Kickoff: new unconditional installer step `metatap`. Found in a game, where Ctrl is crouch and the launcher covered the screen on every press; no macOS equivalent, so it's part of the remap rather than an opt-in feature. Took **two** cleared bindings, not one — `kwinrc` `[ModifierOnlyShortcuts] Meta=` *and* `activate application launcher` in `[plasmashell]`, the latter being the one that kept firing. Kickoff stays on `Alt+F1`.
 - **2026-08-21** — **Menu bar brought into project scope**, simplified: new `menubar` installer feature builds a flush full-width top panel from stock Plasma widgets (global menu, expanding spacer, tray, clock) via plasmashell's `evaluateScript`, skipping cleanly when a top panel already exists. Pulls in `appmenu-gtk-module` so GTK apps export menus. Deliberately excludes the reference machine's third-party Window Title Applet — that's the piece that needed patching twice this week. Scope notes in this doc and CONTRIBUTING.md updated; panels are now in scope, but only this panel.
 - **2026-08-21** — Fixed the reference machine's menu bar: added an expanding panel spacer (widget 93) so the tray and clock stay right-aligned when the focused app exports no global menu (Steam, Electron apps) — the Global Menu applet declares `CanFillArea` and had been the panel's only stretching element, so it dragged the free space away with it when it collapsed. Ops note confirmed again: adding the widget needed plasmashell stopped, `AppletOrder` edited, then restarted.
 - **2026-08-21** — Patched the Window Title Applet (Layer 10): removed its dead `org.kde.plasma.private.appmenu` import, which Plasma 6.7 no longer ships (the Global Menu applet became a C++-only plugin), so plasmashell stopped logging `module ... is not installed` on every load. Reference-machine fix only — the menu bar is not kupertino scope.

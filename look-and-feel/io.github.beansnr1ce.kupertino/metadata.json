@@ -1,0 +1,21 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Id": "io.github.beansnr1ce.kupertino",
+        "Name": "Kupertino",
+        "Description": "Breeze Dark with a macOS-style menu bar and dock. Pairs with kupertino's keyboard shortcuts.",
+        "Category": "Global Themes (Plasma 6)",
+        "License": "MIT",
+        "Version": "1.0.0",
+        "Website": "https://github.com/beansnr1ce/kupertino",
+        "EnabledByDefault": true,
+        "Authors": [
+            {
+                "Name": "beansnr1ce"
+            }
+        ]
+    },
+    "X-KDE-fallbackPackage": "org.kde.breezedark.desktop",
+    "X-Plasma-MainScript": "defaults",
+    "X-Plasma-APIVersion": "2"
+}

@@ -6,6 +6,7 @@ Seams under test (agreed 2026-08-20):
   S3 run_wizard(...)                  - interactive walk, scripted IO
   S4 authorize_plan(...)              - per-step authorization, scripted IO
   S5 execute(...)                     - runs a plan through injected runners
+  S6 build_uninstall_plan(installed)  - pure: live config -> ordered revert steps
 
 Real package installs, sudo, and D-Bus stay untested imperative shell.
 Expected values come from the reference machine's known-good configs,
@@ -111,7 +112,6 @@ def make_system(**kw):
         home="/home/u",
         repo_root="/repo",
         konsole_sessionui_exists=False,
-        top_panel_exists=False,
     )
     defaults.update(kw)
     return installer.SystemState(**defaults)
@@ -120,7 +120,8 @@ def make_system(**kw):
 class TestBuildPlan(unittest.TestCase):
     def test_remap_plan_installs_keyd_then_config(self):
         plan = installer.build_plan(["remap"], make_system())
-        self.assertEqual([s.id for s in plan.steps], ["pkg:keyd", "keyd-config"])
+        self.assertEqual([s.id for s in plan.steps],
+                         ["pkg:keyd", "keyd-config", "metatap"])
 
         # Non-interactive on purpose: the user already authorized this exact
         # step, and an interactive prompt deadlocks when stdin is piped
@@ -155,12 +156,13 @@ class TestBuildPlanKdeSteps(unittest.TestCase):
         system = make_system(installed_packages={"keyd", "spectacle"})
         plan = installer.build_plan(["remap", "cmdq", "screenshots"], system)
         self.assertEqual(
-            [s.id for s in plan.steps], ["keyd-config", "cmdq", "screenshots"]
+            [s.id for s in plan.steps],
+            ["keyd-config", "metatap", "cmdq", "screenshots"],
         )
 
         # Entries below are transcribed from the reference machine's working
         # kglobalshortcutsrc ([kwin] entries are active,default,description).
-        cmdq = plan.steps[1]
+        cmdq = plan.steps[2]
         self.assertEqual(cmdq.commands, [
             ["kwriteconfig6", "--file", "kglobalshortcutsrc",
              "--group", "kwin", "--key", "Window Close",
@@ -169,7 +171,7 @@ class TestBuildPlanKdeSteps(unittest.TestCase):
                       "67108945", "150994995"],
         ])
 
-        shots = plan.steps[2]
+        shots = plan.steps[3]
         self.assertIn(
             ["kwriteconfig6", "--file", "kglobalshortcutsrc",
              "--group", "services", "--group", "org.kde.spectacle.desktop",
@@ -198,8 +200,30 @@ class TestBuildPlanKdeSteps(unittest.TestCase):
     def test_unknown_package_manager_warns_instead_of_crashing(self):
         system = make_system(package_manager=None)
         plan = installer.build_plan(["remap"], system)
-        self.assertEqual([s.id for s in plan.steps], ["keyd-config"])
+        self.assertEqual([s.id for s in plan.steps],
+                         ["keyd-config", "metatap"])
         self.assertTrue(any("keyd" in w for w in plan.warnings))
+
+    def test_metatap_step_kills_both_launcher_bindings(self):
+        # Physical Ctrl emits Meta, so a bare Ctrl tap (crouch in a game)
+        # opened Kickoff. Two independent bindings do that; clearing only
+        # KWin's modifier-only shortcut left it firing (2026-08-22), so both
+        # must be in the step. Unconditional: it has no macOS equivalent.
+        plan = installer.build_plan(["remap"],
+                                    make_system(installed_packages={"keyd"}))
+        step = next(s for s in plan.steps if s.id == "metatap")
+        self.assertEqual(step.commands, [
+            ["kwriteconfig6", "--file", "kwinrc",
+             "--group", "ModifierOnlyShortcuts", "--key", "Meta", ""],
+            # Active field keeps Alt+F1 only; Meta stays in the default field
+            # so KDE's "reset to default" still restores stock behavior.
+            ["kwriteconfig6", "--file", "kglobalshortcutsrc",
+             "--group", "plasmashell", "--key", "activate application launcher",
+             "Alt+F1,Meta\tAlt+F1,Activate Application Launcher"],
+            BUSCTL + ["plasmashell", "activate application launcher",
+                      "", "", "1", "150994992"],  # Alt+F1 = 0x09000030
+            ["qdbus6", "org.kde.KWin", "/KWin", "reconfigure"],
+        ])
 
     def test_spaces_step_creates_desktops_and_bindings(self):
         plan = installer.build_plan(
@@ -297,72 +321,24 @@ class TestBuildPlanKdeSteps(unittest.TestCase):
         )
 
 
-class TestHasTopPanel(unittest.TestCase):
-    """Groups are flat in appletsrc; only containments carry location=."""
-
-    TOP_PANEL = """\
-[Containments][48]
-formfactor=2
-location=3
-plugin=org.kde.panel
-"""
-
-    BOTTOM_PANEL = """\
-[Containments][23]
-formfactor=2
-location=4
-plugin=org.kde.panel
-"""
-
-    def test_detects_top_edge_panel(self):
-        self.assertTrue(installer.has_top_panel(self.TOP_PANEL))
-
-    def test_bottom_panel_alone_is_not_a_top_panel(self):
-        self.assertFalse(installer.has_top_panel(self.BOTTOM_PANEL))
-
-    def test_finds_top_panel_after_a_bottom_one(self):
-        self.assertTrue(
-            installer.has_top_panel(self.BOTTOM_PANEL + self.TOP_PANEL))
-
-    def test_applet_subgroups_never_count_as_panels(self):
-        # The system tray is a containment-in-applet: it has its own plugin=
-        # line, so a parser that doesn't reset per group could confuse it
-        # with the panel it sits in.
-        config = self.BOTTOM_PANEL + """
-[Containments][23][Applets][75]
-plugin=org.kde.plasma.systemtray
-
-[Containments][23][Applets][75][Applets][78]
-plugin=org.kde.plasma.clipboard
-"""
-        self.assertFalse(installer.has_top_panel(config))
-
-    def test_no_panels_at_all(self):
-        self.assertFalse(installer.has_top_panel(""))
+LAYOUT = (REPO / "look-and-feel" / installer.THEME_ID / "contents" / "layouts"
+          / "org.kde.plasma.desktop-layout.js")
 
 
-class TestMenuBarStep(unittest.TestCase):
-    def _script(self, plan):
-        step = plan.steps[-1]
-        self.assertEqual(step.id, "menubar")
-        self.assertEqual(step.commands[0][:4],
-                         ["qdbus6", "org.kde.plasmashell", "/PlasmaShell",
-                          "org.kde.PlasmaShell.evaluateScript"])
-        return step.commands[0][4]
+class TestThemeLayout(unittest.TestCase):
+    """The menu bar lives in the Global Theme's layout script."""
 
-    def test_builds_panel_with_widgets_in_mac_order(self):
+    def setUp(self):
+        self.script = LAYOUT.read_text()
+
+    def test_menu_bar_widgets_in_mac_order(self):
         # addWidget() appends and Plasma has no reorder API, so the order
         # these calls appear in *is* the resulting panel order.
-        plan = installer.build_plan(
-            ["remap", "menubar"],
-            make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
-        )
-        script = self._script(plan)
         positions = [
-            script.index('addWidget("org.kde.plasma.appmenu")'),
-            script.index('addWidget("org.kde.plasma.panelspacer")'),
-            script.index('addWidget("org.kde.plasma.systemtray")'),
-            script.index('addWidget("org.kde.plasma.digitalclock")'),
+            self.script.index('menubar.addWidget("org.kde.plasma.appmenu")'),
+            self.script.index('menubar.addWidget("org.kde.plasma.panelspacer")'),
+            self.script.index('menubar.addWidget("org.kde.plasma.systemtray")'),
+            self.script.index('menubar.addWidget("org.kde.plasma.digitalclock")'),
         ]
         self.assertEqual(positions, sorted(positions))
 
@@ -371,52 +347,61 @@ class TestMenuBarStep(unittest.TestCase):
         # without an expanding spacer it is the panel's only stretching
         # element and the tray slides left whenever an app (Steam, Electron)
         # exports no menu.
-        plan = installer.build_plan(
-            ["remap", "menubar"],
+        self.assertIn('spacer.currentConfigGroup = ["General"];', self.script)
+        self.assertIn('spacer.writeConfig("expanding", true);', self.script)
+
+    def test_menu_bar_is_flush_and_full_width(self):
+        for setting in ('menubar.location = "top";',
+                        'menubar.floating = false;',
+                        'menubar.lengthMode = "fill";',
+                        'menubar.hiding = "none";'):
+            self.assertIn(setting, self.script)
+
+    def test_dock_keeps_a_launcher(self):
+        # kupertino clears the bare-Meta tap, so the dock's Kickoff is the
+        # launcher's only mouse entry point.
+        self.assertIn('dock.location = "bottom";', self.script)
+        self.assertIn('dock.addWidget("org.kde.plasma.kickoff")', self.script)
+
+
+class TestThemeStep(unittest.TestCase):
+    def _plan(self):
+        return installer.build_plan(
+            ["remap", "theme"],
             make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
         )
-        script = self._script(plan)
-        self.assertIn('spacer.currentConfigGroup = ["General"];', script)
-        self.assertIn('spacer.writeConfig("expanding", true);', script)
 
-    def test_panel_is_flush_and_full_width(self):
-        plan = installer.build_plan(
-            ["remap", "menubar"],
-            make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
-        )
-        script = self._script(plan)
-        for setting in ('panel.location = "top";',
-                        'panel.floating = false;',
-                        'panel.lengthMode = "fill";',
-                        'panel.hiding = "none";'):
-            self.assertIn(setting, script)
+    def test_theme_alone_does_not_disturb_keyd_config(self):
+        self.assertEqual([s.id for s in self._plan().steps],
+                         ["keyd-config", "metatap", "theme"])
 
-    def test_script_refuses_to_add_a_second_top_panel(self):
-        # Belt and braces behind the plan-time skip below: detection reads a
-        # config file, this asks the running shell.
-        plan = installer.build_plan(
-            ["remap", "menubar"],
-            make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
-        )
-        script = self._script(plan)
-        self.assertIn('panels().filter(function (p) { return p.location == "top"; })',
-                      script)
-        self.assertLess(script.index("if (top.length)"),
-                        script.index("new Panel("))
-
-    def test_existing_top_panel_is_left_alone_with_a_warning(self):
-        plan = installer.build_plan(
-            ["remap", "menubar"],
-            make_system(installed_packages={"keyd", "appmenu-gtk-module"},
-                        top_panel_exists=True),
-        )
-        self.assertNotIn("menubar", [s.id for s in plan.steps])
-        self.assertTrue(any("top panel" in w for w in plan.warnings))
+    def test_installs_backs_up_then_applies_with_layout(self):
+        theme = self._plan().steps[-1]
+        self.assertEqual(theme.commands[0],
+                         ["mkdir", "-p", "/home/u/.local/share/plasma/look-and-feel"])
+        self.assertEqual(
+            theme.commands[1],
+            ["cp", "-r", "/repo/look-and-feel/io.github.beansnr1ce.kupertino",
+             "/home/u/.local/share/plasma/look-and-feel/"])
+        backup = theme.commands[2]
+        self.assertEqual(backup[:2], ["bash", "-c"])
+        self.assertEqual(backup[3:], [
+            "kupertino", "/home/u/.local/state/kupertino", "/home/u/.config",
+            "plasma-org.kde.plasma.desktop-appletsrc", "plasmashellrc"])
+        # A reinstall must not overwrite the pre-kupertino backup with
+        # kupertino's own layout.
+        self.assertIn('[ -e "$before" ] && exit 0', backup[2])
+        # --resetLayout is what replaces the panels; without it only the
+        # visuals change and no menu bar appears.
+        self.assertEqual(
+            theme.commands[3],
+            ["plasma-apply-lookandfeel", "-a", "io.github.beansnr1ce.kupertino",
+             "--resetLayout"])
 
     def test_pulls_in_gtk_menu_export_module(self):
         # Qt/KDE apps export menus unaided; GTK apps need the module or the
         # menu bar is empty for them.
-        plan = installer.build_plan(["remap", "menubar"],
+        plan = installer.build_plan(["remap", "theme"],
                                     make_system(installed_packages={"keyd"}))
         self.assertEqual(plan.steps[0].id, "pkg:appmenu-gtk-module")
         self.assertEqual(
@@ -425,14 +410,234 @@ class TestMenuBarStep(unittest.TestCase):
               "appmenu-gtk-module"]],
         )
 
-    def test_menubar_alone_does_not_disturb_keyd_config(self):
-        plan = installer.build_plan(
-            ["remap", "menubar"],
-            make_system(installed_packages={"keyd", "appmenu-gtk-module"}),
-        )
-        self.assertEqual([s.id for s in plan.steps],
-                         ["keyd-config", "menubar"])
 
+class TestParseKconfig(unittest.TestCase):
+    def test_reads_nested_groups_and_decodes_tabs(self):
+        # Excerpt of the reference machine's kglobalshortcutsrc: the tab
+        # between sequences is stored as a literal backslash-t.
+        text = r"""[kwin]
+Window Close=Ctrl+Q\tAlt+F4,Alt+F4,Close Window
+
+[services][org.kde.spectacle.desktop]
+RecordScreen=none
+"""
+        entries = installer.parse_kconfig(text)
+        self.assertEqual(entries[(("kwin",), "Window Close")],
+                         "Ctrl+Q\tAlt+F4,Alt+F4,Close Window")
+        self.assertEqual(
+            entries[(("services", "org.kde.spectacle.desktop"), "RecordScreen")],
+            "none")
+
+    def test_empty_value_is_kept(self):
+        # kwinrc's cleared launcher tap is `Meta=` — present but empty.
+        entries = installer.parse_kconfig("[ModifierOnlyShortcuts]\nMeta=\n")
+        self.assertEqual(entries[(("ModifierOnlyShortcuts",), "Meta")], "")
+
+
+# The reference machine's live config after a full install, transcribed.
+REFERENCE_SHORTCUTS = r"""[KDE Keyboard Layout Switcher]
+Switch to Next Keyboard Layout=none,Meta+Alt+K,Switch to Next Keyboard Layout
+
+[kwin]
+ExposeClass=Ctrl+F7\tMeta+Down\tMeta+F7,Ctrl+F7\tMeta+F7,Toggle Present Windows (Window class)
+Overview=Meta+W\tMeta+Up,Meta+W,Toggle Overview
+Switch One Desktop to the Left=Meta+Left,Meta+Ctrl+Left,Switch One Desktop to the Left
+Switch One Desktop to the Right=Meta+Right,Meta+Ctrl+Right,Switch One Desktop to the Right
+Switch Window Down=none,Meta+Alt+Down,Switch to Window Below
+Switch Window Left=none,Meta+Alt+Left,Switch to Window to the Left
+Switch Window Right=none,Meta+Alt+Right,Switch to Window to the Right
+Switch Window Up=none,Meta+Alt+Up,Switch to Window Above
+Window Close=Ctrl+Q\tAlt+F4,Alt+F4,Close Window
+Window Quick Tile Bottom=Meta+Ctrl+Down,Meta+Down,Quick Tile Window to the Bottom
+Window Quick Tile Left=Meta+Ctrl+Left,Meta+Left,Quick Tile Window to the Left
+Window Quick Tile Right=Meta+Ctrl+Right,Meta+Right,Quick Tile Window to the Right
+Window Quick Tile Top=Meta+Ctrl+Up,Meta+Up,Quick Tile Window to the Top
+
+[plasmashell]
+activate application launcher=Alt+F1,Meta\tAlt+F1,Activate Application Launcher
+
+[services][org.kde.spectacle.desktop]
+ActiveWindowScreenShot=Ctrl+^\tCtrl+Shift+6\tCtrl+Shift+^\tMeta+Print
+FullScreenScreenShot=Shift+Print\tCtrl+#\tCtrl+Shift+#\tCtrl+Shift+3
+RecordScreen=none
+RectangularRegionScreenShot=Ctrl+$\tCtrl+Shift+$\tCtrl+Shift+4\tMeta+Shift+Print
+_launch=Print\tCtrl+%\tCtrl+Shift+%\tCtrl+Shift+5\tMeta+Shift+S
+"""
+
+REFERENCE_KWINRC = """[ModifierOnlyShortcuts]
+Meta=
+
+[Plugins]
+cupertino-snapEnabled=true
+"""
+
+
+def make_installed(**kw):
+    defaults = dict(
+        home="/home/u",
+        keyd_config=(REPO / "keyd" / "default.conf").read_text(),
+        kglobalshortcuts=installer.parse_kconfig(REFERENCE_SHORTCUTS),
+        kwinrc=installer.parse_kconfig(REFERENCE_KWINRC),
+        konsole_sessionui=installer.KONSOLE_SESSIONUI,
+        snap_installed=True,
+        theme_installed=True,
+        active_theme="io.github.beansnr1ce.kupertino",
+        previous_theme="org.kde.breezedark.desktop",
+        panels_backed_up=True,
+    )
+    defaults.update(kw)
+    return installer.InstalledState(**defaults)
+
+
+def make_clean(**kw):
+    """A machine with nothing of kupertino's on it."""
+    defaults = dict(keyd_config="", kglobalshortcuts={}, kwinrc={},
+                    konsole_sessionui="", snap_installed=False,
+                    theme_installed=False, active_theme="org.kde.breeze.desktop",
+                    previous_theme="", panels_backed_up=False)
+    defaults.update(kw)
+    return make_installed(**defaults)
+
+
+class TestUninstallPlan(unittest.TestCase):
+    def test_full_install_reverts_everything_in_order(self):
+        plan = installer.build_uninstall_plan(make_installed())
+        # Snap before shortcuts: the script holds the Meta+Alt chords that
+        # Plasma's restored defaults need back.
+        self.assertEqual(
+            [s.id for s in plan.steps],
+            ["theme-restore", "theme-remove", "snap", "shortcuts",
+             "konsole-copy-paste", "keyd-config"])
+
+    def test_clean_machine_has_nothing_to_do(self):
+        plan = installer.build_uninstall_plan(make_clean())
+        self.assertEqual(plan.steps, [])
+
+    def test_theme_restore_puts_back_previous_theme_and_panels(self):
+        plan = installer.build_uninstall_plan(make_installed())
+        restore = plan.steps[0]
+        self.assertEqual(restore.commands[0],
+                         ["plasma-apply-lookandfeel", "-a",
+                          "org.kde.breezedark.desktop"])
+        script, *args = restore.commands[1][2:]
+        self.assertEqual(args, ["kupertino", "/home/u/.local/state/kupertino/before",
+                                "/home/u/.config"])
+        # plasmashell rewrites its config on exit, so it is stopped around
+        # the copy and started again even if the copy fails.
+        self.assertLess(script.index("stop plasma-plasmashell"),
+                        script.index("cp "))
+        self.assertTrue(script.endswith(
+            "start plasma-plasmashell.service; exit $rc"))
+
+    def test_theme_restore_without_backup_resets_to_breeze_layout(self):
+        plan = installer.build_uninstall_plan(
+            make_installed(previous_theme="", panels_backed_up=False))
+        self.assertEqual(plan.steps[0].commands,
+                         [["plasma-apply-lookandfeel", "-a",
+                           "org.kde.breeze.desktop", "--resetLayout"]])
+
+    def test_another_active_theme_is_left_alone(self):
+        # The whole point: trying WhiteSur after kupertino must not be undone
+        # by uninstalling kupertino.
+        plan = installer.build_uninstall_plan(make_installed(
+            active_theme="com.github.vinceliuice.WhiteSurLiquid-dark"))
+        ids = [s.id for s in plan.steps]
+        self.assertNotIn("theme-restore", ids)
+        self.assertIn("theme-remove", ids)
+        self.assertTrue(any("isn't your active Global Theme" in w
+                            for w in plan.warnings))
+
+    def test_theme_remove_deletes_package_and_backup(self):
+        plan = installer.build_uninstall_plan(make_installed())
+        remove = next(s for s in plan.steps if s.id == "theme-remove")
+        self.assertEqual(remove.commands, [[
+            "rm", "-rf",
+            "/home/u/.local/share/plasma/look-and-feel/"
+            "io.github.beansnr1ce.kupertino",
+            "/home/u/.local/state/kupertino"]])
+
+    def test_shortcuts_reset_to_plasma_defaults(self):
+        plan = installer.build_uninstall_plan(make_installed())
+        reset = next(s for s in plan.steps if s.id == "shortcuts")
+        # [kwin] entry: the default field becomes the active one again.
+        self.assertIn(
+            ["kwriteconfig6", "--file", "kglobalshortcutsrc",
+             "--group", "kwin", "--key", "Window Close",
+             "Alt+F4,Alt+F4,Close Window"], reset.commands)
+        self.assertIn(BUSCTL + ["kwin", "Window Close", "", "", "1",
+                                "150994995"], reset.commands)
+        # A cleared Rectangle conflict comes back.
+        self.assertIn(BUSCTL + ["kwin", "Switch Window Left", "", "", "1",
+                                "419430418"],  # Meta+Alt+Left = 0x19000012
+                      reset.commands)
+        # [services] entries carry no default; Spectacle's .desktop does.
+        self.assertIn(
+            ["kwriteconfig6", "--file", "kglobalshortcutsrc",
+             "--group", "services", "--group", "org.kde.spectacle.desktop",
+             "--key", "_launch", "Print\tMeta+Shift+S"], reset.commands)
+        self.assertIn(
+            ["kwriteconfig6", "--file", "kglobalshortcutsrc",
+             "--group", "services", "--group", "org.kde.spectacle.desktop",
+             "--key", "RecordScreen", "Meta+Alt+R"], reset.commands)
+        # The bare-Meta launcher tap comes back: both bindings.
+        self.assertIn(BUSCTL + ["plasmashell", "activate application launcher",
+                                "", "", "2", "16777250", "150994992"],
+                      reset.commands)
+        self.assertIn(["kwriteconfig6", "--file", "kwinrc",
+                       "--group", "ModifierOnlyShortcuts", "--key", "Meta",
+                       "--delete"], reset.commands)
+        self.assertEqual(reset.commands[-1],
+                         ["qdbus6", "org.kde.KWin", "/KWin", "reconfigure"])
+
+    def test_every_installed_binding_is_reset(self):
+        plan = installer.build_uninstall_plan(make_installed())
+        reset = next(s for s in plan.steps if s.id == "shortcuts")
+        written = [c for c in reset.commands if c[:3] == ["kwriteconfig6",
+                                                          "--file",
+                                                          "kglobalshortcutsrc"]]
+        self.assertEqual(len(written), len(installer.KUPERTINO_BINDINGS))
+        self.assertEqual(len(written), 20)
+
+    def test_binding_changed_since_install_is_left_alone(self):
+        shortcuts = installer.parse_kconfig(REFERENCE_SHORTCUTS)
+        shortcuts[(("kwin",), "Window Close")] = "Meta+Q,Alt+F4,Close Window"
+        plan = installer.build_uninstall_plan(
+            make_installed(kglobalshortcuts=shortcuts))
+        reset = next(s for s in plan.steps if s.id == "shortcuts")
+        self.assertFalse(any("Window Close" in c for c in reset.commands))
+
+    def test_foreign_keyd_and_konsole_configs_are_left_alone(self):
+        plan = installer.build_uninstall_plan(make_installed(
+            keyd_config="[ids]\n*\n\n[main]\ncapslock = escape\n",
+            konsole_sessionui="<gui name=\"session\"/>\n"))
+        ids = [s.id for s in plan.steps]
+        self.assertNotIn("keyd-config", ids)
+        self.assertNotIn("konsole-copy-paste", ids)
+
+    def test_keyd_removal_stops_keyd_only_without_other_configs(self):
+        plan = installer.build_uninstall_plan(make_installed())
+        keyd = plan.steps[-1]
+        self.assertEqual(keyd.commands[0],
+                         ["sudo", "rm", "/etc/keyd/default.conf"])
+        self.assertEqual(keyd.commands[1][:2], ["bash", "-c"])
+        self.assertIn("then sudo systemctl restart keyd", keyd.commands[1][2])
+        self.assertIn("else sudo systemctl disable --now keyd",
+                      keyd.commands[1][2])
+
+    def test_snap_removal_disables_then_deletes_script(self):
+        plan = installer.build_uninstall_plan(make_installed())
+        snap = next(s for s in plan.steps if s.id == "snap")
+        self.assertEqual(snap.commands, [
+            ["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
+             "--key", "cupertino-snapEnabled", "--delete"],
+            ["qdbus6", "org.kde.KWin", "/KWin", "reconfigure"],
+            ["rm", "-rf", "/home/u/.local/share/kwin/scripts/cupertino-snap"],
+        ])
+
+    def test_packages_and_desktops_are_called_out_as_kept(self):
+        plan = installer.build_uninstall_plan(make_installed())
+        self.assertTrue(any("keyd" in w and "virtual desktops" in w
+                            for w in plan.warnings))
 
 
 def scripted(answers):
@@ -454,7 +659,7 @@ class TestWizard(unittest.TestCase):
         self.assertEqual(
             selections,
             ["remap", "textnav", "cmdtab", "cmdq", "screenshots",
-             "spaces", "appconv", "rectangle", "menubar"],
+             "spaces", "appconv", "rectangle", "theme"],
         )
         self.assertEqual(len(prompts), 9)
 

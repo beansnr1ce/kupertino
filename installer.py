@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""kupertino interactive installer.
+"""kupertino interactive installer and uninstaller.
 
-Walks through each shortcut feature, then installs the user's selections,
-asking authorization for every step. Stdlib only; tests in tests/.
+Install walks through each feature, then installs the user's selections,
+asking authorization for every step. Uninstall (--uninstall) reverts every
+change that still carries kupertino's values, with the same per-step
+authorization. Stdlib only; tests in tests/.
 """
 
+import re
 from dataclasses import dataclass, field
 
 # --- Qt keycodes ------------------------------------------------------------
@@ -19,6 +22,7 @@ QT_MODIFIERS = {
 }
 
 QT_SPECIAL_KEYS = {
+    "Meta": 0x01000022,  # bare Meta, as in Plasma's default launcher tap
     "Space": 0x20,
     "Return": 0x01000004,
     "Backspace": 0x01000003,
@@ -194,10 +198,12 @@ FEATURES = [
     Feature("rectangle", "Cupertino Snap window management",
             "All 22 Rectangle.app-compatible shortcuts on ⌃⌥ (physical Ctrl+Super): "
             "halves, corners, thirds, maximize, center, restore, displays."),
-    Feature("menubar", "macOS menu bar",
-            "A flush, full-width top panel: the focused app's menus on the "
-            "left, system tray and clock on the right. Stock Plasma widgets "
-            "only. Skipped if you already have a top panel."),
+    Feature("theme", "Kupertino Global Theme",
+            "A Plasma Global Theme: Breeze Dark, a flush macOS menu bar (the "
+            "focused app's menus left, tray and clock right) and a dock. "
+            "Replaces your current panels; they are backed up and "
+            "./uninstall.sh puts them back. Switch themes any time in System "
+            "Settings → Global Theme."),
 ]
 
 
@@ -265,7 +271,6 @@ class SystemState:
     home: str
     repo_root: str
     konsole_sessionui_exists: bool
-    top_panel_exists: bool
 
 
 @dataclass
@@ -288,7 +293,7 @@ FEATURE_PACKAGES = {
     "screenshots": ["spectacle"],
     # Qt/KDE apps export their menus over D-Bus unaided; GTK apps need this
     # module or the menu bar stays empty for them.
-    "menubar": ["appmenu-gtk-module"],
+    "theme": ["appmenu-gtk-module"],
 }
 
 # v1.0 targets CachyOS/Arch. --noconfirm on purpose: the user authorized the
@@ -332,13 +337,26 @@ SPECTACLE_BINDINGS = [
 ]
 
 
+# Spectacle's stock shortcuts, from X-KDE-Shortcuts in its .desktop file.
+# [services] entries hold only the active field, so uninstall needs these.
+SPECTACLE_DEFAULTS = {
+    "FullScreenScreenShot": "Shift+Print",
+    "RectangularRegionScreenShot": "Meta+Shift+Print",
+    "_launch": "Print\tMeta+Shift+S",
+    "ActiveWindowScreenShot": "Meta+Print",
+    "RecordScreen": "Meta+Alt+R",
+}
+
+CMDQ_BINDING = ("kwin", ["kwin"], "Window Close",
+                "Ctrl+Q\tAlt+F4,Alt+F4,Close Window")
+
+
 def _cmdq_step(system, plan):
     return Step(
         id="cmdq",
         description="Bind KDE-side Ctrl+Q (physical Alt+Q, mac ⌘Q) to KWin's "
                     "Window Close",
-        commands=_binding_cmds("kwin", ["kwin"], "Window Close",
-                               "Ctrl+Q\tAlt+F4,Alt+F4,Close Window"),
+        commands=_binding_cmds(*CMDQ_BINDING),
     )
 
 
@@ -479,79 +497,50 @@ def _rectangle_step(system, plan):
     )
 
 
-# The simplified menu bar: stock Plasma widgets only, in mac order — Global
-# Menu, expanding spacer, system tray, clock. The spacer is the load-bearing
-# part: the Global Menu applet declares Plasmoid.CanFillArea, so without a
-# spacer it is the panel's only expanding element, and when the focused app
-# exports no menu (Steam, Electron apps) it collapses to zero width and drags
-# the tray and clock left with it.
-#
-# Height 27 and the flush/full-width geometry are the reference machine's.
-# addWidget() appends, so creation order *is* the panel order — there is no
-# reorder API (rearranging an existing panel means stopping plasmashell and
-# editing AppletOrder by hand), which is why this only ever builds a new panel.
-MENUBAR_PANEL_SCRIPT = """\
-var top = panels().filter(function (p) { return p.location == "top"; });
-if (top.length) {
-    print("kupertino: a top panel already exists - left untouched");
-} else {
-    var panel = new Panel("org.kde.panel");
-    panel.location = "top";
-    panel.height = 27;
-    panel.alignment = "center";
-    panel.lengthMode = "fill";
-    panel.hiding = "none";
-    panel.floating = false;
-    panel.addWidget("org.kde.plasma.appmenu");
-    var spacer = panel.addWidget("org.kde.plasma.panelspacer");
-    spacer.currentConfigGroup = ["General"];
-    spacer.writeConfig("expanding", true);
-    panel.addWidget("org.kde.plasma.systemtray");
-    panel.addWidget("org.kde.plasma.digitalclock");
-}
-"""
+# The menu bar and dock ship as a Plasma Global Theme (look-and-feel/), so
+# switching to another theme — and back — goes through System Settings
+# instead of fighting a panel the installer built by hand. Applying with
+# --resetLayout replaces every panel, so the current panel config and theme
+# name are backed up first; uninstall restores them. The backup is taken only
+# once, so a reinstall never overwrites the pre-kupertino layout with
+# kupertino's own.
+THEME_ID = "io.github.beansnr1ce.kupertino"
+PANEL_FILES = ["plasma-org.kde.plasma.desktop-appletsrc", "plasmashellrc"]
+
+_BACKUP_LAYOUT = (
+    'before="$1/before"; config="$2"; shift 2; '
+    '[ -e "$before" ] && exit 0; '
+    'mkdir -p "$before" || exit 1; '
+    'for f in "$@"; do '
+    '[ -e "$config/$f" ] && { cp "$config/$f" "$before/" || exit 1; }; done; '
+    'kreadconfig6 --file kdeglobals --group KDE --key LookAndFeelPackage '
+    '> "$before/lookandfeel"'
+)
 
 
-def has_top_panel(appletsrc_text):
-    """True if the Plasma applet config already declares a top-edge panel.
-
-    Containment groups carry `plugin=org.kde.panel` plus a `location=` key —
-    3 is the top edge, 4 the bottom. Applet subgroups carry a `plugin=` too,
-    but never `org.kde.panel`, so resetting at every group header is enough.
-    """
-    def is_top_panel(plugin, location):
-        return plugin == "org.kde.panel" and location == "3"
-
-    found = False
-    plugin = location = None
-    for line in appletsrc_text.splitlines():
-        line = line.strip()
-        if line.startswith("["):
-            found = found or is_top_panel(plugin, location)
-            plugin = location = None
-        elif line.startswith("plugin="):
-            plugin = line.split("=", 1)[1]
-        elif line.startswith("location="):
-            location = line.split("=", 1)[1]
-    return found or is_top_panel(plugin, location)
+def _theme_dir(system):
+    return f"{system.home}/.local/share/plasma/look-and-feel"
 
 
-def _menubar_step(system, plan):
-    if system.top_panel_exists:
-        plan.warnings.append(
-            "You already have a top panel — the menu bar step is skipped so "
-            "your layout isn't disturbed. To do it by hand, add the Global "
-            "Menu, a Panel Spacer set to expanding, the system tray and a "
-            "clock, in that order.")
-        return None
+def _state_dir(system):
+    return f"{system.home}/.local/state/kupertino"
+
+
+def _theme_step(system, plan):
     return Step(
-        id="menubar",
-        description="Create the macOS menu bar: a flush, full-width top panel "
-                    "with the Global Menu, an expanding spacer, the system "
-                    "tray and a clock",
-        commands=[["qdbus6", "org.kde.plasmashell", "/PlasmaShell",
-                   "org.kde.PlasmaShell.evaluateScript",
-                   MENUBAR_PANEL_SCRIPT]],
+        id="theme",
+        description="Install and apply the Kupertino Global Theme (Breeze "
+                    "Dark, menu bar, dock). Replaces your current panels — "
+                    "they are backed up first and ./uninstall.sh puts them "
+                    "back",
+        commands=[
+            ["mkdir", "-p", _theme_dir(system)],
+            ["cp", "-r", f"{system.repo_root}/look-and-feel/{THEME_ID}",
+             f"{_theme_dir(system)}/"],
+            ["bash", "-c", _BACKUP_LAYOUT, "kupertino", _state_dir(system),
+             f"{system.home}/.config"] + PANEL_FILES,
+            ["plasma-apply-lookandfeel", "-a", THEME_ID, "--resetLayout"],
+        ],
     )
 
 
@@ -561,8 +550,13 @@ KDE_STEP_BUILDERS = {
     "screenshots": _screenshots_step,
     "spaces": _spaces_step,
     "appconv": _appconv_step,
-    "menubar": _menubar_step,
+    "theme": _theme_step,
 }
+
+
+METATAP_BINDING = ("plasmashell", ["plasmashell"],
+                   "activate application launcher",
+                   "Alt+F1,Meta\tAlt+F1,Activate Application Launcher")
 
 
 def build_plan(selections, system):
@@ -603,6 +597,27 @@ def build_plan(selections, system):
         ],
     ))
 
+    # Physical Ctrl emits Meta, so every bare Ctrl tap — crouch in a game,
+    # a released chord — fires KDE's Meta-tap binding and Kickoff covers the
+    # screen. macOS has no such behavior, so this is unconditional rather than
+    # a feature. Two *independent* bindings put Kickoff on a bare Meta tap and
+    # both have to go (2026-08-22: clearing only the first left it firing):
+    # KWin's modifier-only shortcut, and plasmashell's real global shortcut on
+    # bare Meta, which is the one that actually fires. Kickoff stays reachable
+    # on Alt+F1 (physical Win+F1) and from any launcher widget on a panel.
+    plan.steps.append(Step(
+        id="metatap",
+        description="Stop a bare physical-Ctrl tap from opening the "
+                    "application launcher (no macOS equivalent; Kickoff "
+                    "stays on Alt+F1)",
+        commands=(
+            [["kwriteconfig6", "--file", "kwinrc",
+              "--group", "ModifierOnlyShortcuts", "--key", "Meta", ""]]
+            + _binding_cmds(*METATAP_BINDING)
+            + [["qdbus6", "org.kde.KWin", "/KWin", "reconfigure"]]
+        ),
+    ))
+
     for feature in selected:
         builder = KDE_STEP_BUILDERS.get(feature)
         if builder is None:
@@ -610,6 +625,192 @@ def build_plan(selections, system):
         step = builder(system, plan)
         if step is not None:
             plan.steps.append(step)
+    return plan
+
+
+# --- uninstall --------------------------------------------------------------
+# Stateless on purpose: installs from before uninstall existed kept no record,
+# so uninstall reads the live config and reverts only what still carries
+# kupertino's exact value. Anything the user has changed since is left alone.
+
+@dataclass
+class InstalledState:
+    home: str
+    keyd_config: str        # /etc/keyd/default.conf, "" if absent
+    kglobalshortcuts: dict  # parse_kconfig() of kglobalshortcutsrc
+    kwinrc: dict            # parse_kconfig() of kwinrc
+    konsole_sessionui: str  # "" if absent
+    snap_installed: bool
+    theme_installed: bool
+    active_theme: str
+    previous_theme: str     # from the install-time backup, "" if none
+    panels_backed_up: bool
+
+
+_KCONFIG_ESCAPES = {"\\\\": "\\", "\\t": "\t", "\\n": "\n", "\\r": "\r",
+                    "\\s": " "}
+
+
+def parse_kconfig(text):
+    """{(groups, key): value} for a KConfig file, with escapes decoded.
+
+    groups is a tuple, e.g. ('services', 'org.kde.spectacle.desktop').
+    kglobalshortcutsrc stores the tab between sequences as a literal \\t.
+    """
+    entries = {}
+    groups = ()
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            groups = tuple(line[1:-1].split("]["))
+        elif "=" in line and not line.startswith("#"):
+            key, value = line.split("=", 1)
+            entries[(groups, key)] = re.sub(
+                r"\\[\\tnrs]", lambda m: _KCONFIG_ESCAPES[m.group()], value)
+    return entries
+
+
+# Every (component, groups, key, entry) the installer can write.
+KUPERTINO_BINDINGS = (
+    [CMDQ_BINDING, METATAP_BINDING]
+    + [("kwin", ["kwin"], action, entry) for action, entry in SPACES_BINDINGS]
+    + [("org.kde.spectacle.desktop", ["services", "org.kde.spectacle.desktop"],
+        action, entry) for action, entry in SPECTACLE_BINDINGS]
+    + RECTANGLE_CONFLICT_CLEARS
+)
+
+
+def stock_entry(groups, key, entry):
+    """Plasma's default for a binding kupertino wrote.
+
+    [kwin]-style entries carry their default as the second field; [services]
+    entries hold only the active field, so those defaults are tabled.
+    """
+    if groups[0] == "services":
+        return SPECTACLE_DEFAULTS[key]
+    _active, default, description = entry.split(",")
+    return f"{default},{default},{description}"
+
+
+# Only kupertino's config has the physical-Alt-as-Command layer.
+KEYD_SIGNATURE = "leftalt = layer(cmd)"
+
+# With no config left keyd has nothing to do, so it is stopped rather than
+# restarted — unless the user has other configs of their own.
+_STOP_KEYD = (
+    "if ls /etc/keyd/*.conf >/dev/null 2>&1; "
+    "then sudo systemctl restart keyd; "
+    "else sudo systemctl disable --now keyd; fi"
+)
+
+# plasmashell rewrites its panel config on exit, so it must be stopped while
+# the backup goes back in — and started again even if the copy fails.
+_RESTORE_PANELS = (
+    "systemctl --user stop plasma-plasmashell.service; "
+    'cp "$1"/*rc "$2/"; rc=$?; '
+    "systemctl --user start plasma-plasmashell.service; exit $rc"
+)
+
+
+def build_uninstall_plan(installed):
+    """Turn what is still installed into ordered revert steps."""
+    plan = Plan()
+    home = installed.home
+    state = f"{home}/.local/state/kupertino"
+
+    if installed.active_theme == THEME_ID:
+        previous = installed.previous_theme or "org.kde.breeze.desktop"
+        if installed.panels_backed_up:
+            plan.steps.append(Step(
+                id="theme-restore",
+                description=f"Switch back to your previous Global Theme "
+                            f"({previous}) and restore the panels you had "
+                            "before kupertino",
+                commands=[
+                    ["plasma-apply-lookandfeel", "-a", previous],
+                    ["bash", "-c", _RESTORE_PANELS, "kupertino",
+                     f"{state}/before", f"{home}/.config"],
+                ],
+            ))
+        else:
+            plan.steps.append(Step(
+                id="theme-restore",
+                description=f"Switch to the {previous} Global Theme with its "
+                            "default panels (no pre-kupertino panel backup "
+                            "was found)",
+                commands=[["plasma-apply-lookandfeel", "-a", previous,
+                           "--resetLayout"]],
+            ))
+    elif installed.theme_installed:
+        plan.warnings.append(
+            "Kupertino isn't your active Global Theme, so your current look "
+            "and panels are left as they are.")
+
+    if installed.theme_installed or installed.panels_backed_up:
+        plan.steps.append(Step(
+            id="theme-remove",
+            description="Remove the Kupertino Global Theme package and its "
+                        "panel backup",
+            commands=[["rm", "-rf",
+                       f"{home}/.local/share/plasma/look-and-feel/{THEME_ID}",
+                       state]],
+        ))
+
+    # Before the shortcut reset: the script holds the Meta+Alt chords that
+    # Plasma's restored defaults need back.
+    snap_enabled = installed.kwinrc.get(
+        (("Plugins",), "cupertino-snapEnabled")) == "true"
+    if installed.snap_installed or snap_enabled:
+        plan.steps.append(Step(
+            id="snap",
+            description="Disable and remove the Cupertino Snap KWin script",
+            commands=[
+                ["kwriteconfig6", "--file", "kwinrc", "--group", "Plugins",
+                 "--key", "cupertino-snapEnabled", "--delete"],
+                ["qdbus6", "org.kde.KWin", "/KWin", "reconfigure"],
+                ["rm", "-rf", f"{home}/.local/share/kwin/scripts/cupertino-snap"],
+            ],
+        ))
+
+    commands = []
+    for component, groups, key, entry in KUPERTINO_BINDINGS:
+        if installed.kglobalshortcuts.get((tuple(groups), key)) == entry:
+            commands += _binding_cmds(component, groups, key,
+                                      stock_entry(groups, key, entry))
+    if installed.kwinrc.get((("ModifierOnlyShortcuts",), "Meta")) == "":
+        commands.append(["kwriteconfig6", "--file", "kwinrc",
+                         "--group", "ModifierOnlyShortcuts", "--key", "Meta",
+                         "--delete"])
+    if commands:
+        plan.steps.append(Step(
+            id="shortcuts",
+            description="Reset the KDE shortcuts kupertino changed to Plasma's "
+                        "defaults (any you've changed since are left alone)",
+            commands=commands + [["qdbus6", "org.kde.KWin", "/KWin",
+                                  "reconfigure"]],
+        ))
+
+    if installed.konsole_sessionui == KONSOLE_SESSIONUI:
+        plan.steps.append(Step(
+            id="konsole-copy-paste",
+            description="Remove kupertino's Konsole Copy/Paste override",
+            commands=[["rm", f"{home}/.local/share/kxmlgui5/konsole/"
+                             "sessionui.rc"]],
+        ))
+
+    if KEYD_SIGNATURE in installed.keyd_config:
+        plan.steps.append(Step(
+            id="keyd-config",
+            description="Remove the keyd keyboard layer "
+                        "(/etc/keyd/default.conf); the modifier row is back "
+                        "to normal immediately",
+            commands=[["sudo", "rm", "/etc/keyd/default.conf"],
+                      ["bash", "-c", _STOP_KEYD]],
+        ))
+
+    plan.warnings.append(
+        "Left in place: installed packages (keyd, spectacle, "
+        "appmenu-gtk-module) and your virtual desktops.")
     return plan
 
 
@@ -629,7 +830,6 @@ def detect_system():
     if Path("/usr/lib/gtk-3.0/modules/libappmenu-gtk-module.so").exists():
         installed.add("appmenu-gtk-module")
     sessionui = Path(home) / ".local/share/kxmlgui5/konsole/sessionui.rc"
-    appletsrc = Path(home) / ".config/plasma-org.kde.plasma.desktop-appletsrc"
     return SystemState(
         package_manager=manager,
         installed_packages=installed,
@@ -637,32 +837,50 @@ def detect_system():
         home=home,
         repo_root=str(Path(__file__).resolve().parent),
         konsole_sessionui_exists=sessionui.exists(),
-        top_panel_exists=(appletsrc.exists()
-                          and has_top_panel(appletsrc.read_text())),
     )
 
 
-def main():
+def detect_installed():
+    from pathlib import Path
+
+    home = Path.home()
+
+    def read(path):
+        try:
+            return Path(path).read_text()
+        except OSError:
+            return ""
+
+    before = home / ".local/state/kupertino/before"
+    kdeglobals = parse_kconfig(read(home / ".config/kdeglobals"))
+    return InstalledState(
+        home=str(home),
+        keyd_config=read("/etc/keyd/default.conf"),
+        kglobalshortcuts=parse_kconfig(read(home / ".config/kglobalshortcutsrc")),
+        kwinrc=parse_kconfig(read(home / ".config/kwinrc")),
+        konsole_sessionui=read(
+            home / ".local/share/kxmlgui5/konsole/sessionui.rc"),
+        snap_installed=(home / ".local/share/kwin/scripts/cupertino-snap").exists(),
+        theme_installed=(home / ".local/share/plasma/look-and-feel"
+                         / THEME_ID).exists(),
+        active_theme=kdeglobals.get((("KDE",), "LookAndFeelPackage"), ""),
+        previous_theme=read(before / "lookandfeel").strip(),
+        panels_backed_up=(before / PANEL_FILES[0]).exists(),
+    )
+
+
+def _authorize_and_run(plan, verb, script, say, ask):
+    """Shared tail of install and uninstall: warn, authorize, execute."""
     import subprocess
     from pathlib import Path
 
-    say, ask = print, input
-    say("kupertino — macOS keyboard shortcuts for KDE Plasma")
-    say("=" * 51)
-    say("Pick features first; nothing is installed until you authorize each")
-    say("step at the end. keyd's panic exit, should a config ever lock your")
-    say("keyboard, is Backspace+Escape+Enter.")
-
-    selections = run_wizard(FEATURES, ask, say)
-    if not selections:
-        say("\nNothing selected — no changes made.")
-        return 0
-
-    plan = build_plan(selections, detect_system())
     for warning in plan.warnings:
         say(f"\n⚠ {warning}")
+    if not plan.steps:
+        say(f"\nNothing to {verb} — no changes made.")
+        return 0
 
-    say(f"\n{len(plan.steps)} step(s) to install. Authorize each:")
+    say(f"\n{len(plan.steps)} step(s) to {verb}. Authorize each:")
     approved = authorize_plan(plan, ask, say)
     if not approved:
         say("\nNothing authorized — no changes made.")
@@ -676,12 +894,41 @@ def main():
     result = execute(approved, subprocess.call, write_file, say)
     if result.failed:
         say(f"\n✗ Step '{result.failed}' failed — remaining steps were NOT "
-            "run. Fix the error and re-run ./install.sh (steps are "
+            f"run. Fix the error and re-run {script} (steps are "
             "idempotent).")
         return 1
-    say(f"\n✓ Done — {len(result.completed)} step(s) installed. Shortcuts "
+    say(f"\n✓ Done — {len(result.completed)} step(s) completed. Changes "
         "are live now; no logout needed.")
     return 0
+
+
+def main(argv=None):
+    import sys
+
+    argv = sys.argv[1:] if argv is None else argv
+    say, ask = print, input
+
+    if argv == ["--uninstall"]:
+        say("kupertino — uninstall")
+        say("=" * 21)
+        say("Reverts only what still carries kupertino's values; anything")
+        say("you've changed since is left alone. Authorize each step.")
+        return _authorize_and_run(build_uninstall_plan(detect_installed()),
+                                  "uninstall", "./uninstall.sh", say, ask)
+
+    say("kupertino — macOS keyboard shortcuts for KDE Plasma")
+    say("=" * 51)
+    say("Pick features first; nothing is installed until you authorize each")
+    say("step at the end. keyd's panic exit, should a config ever lock your")
+    say("keyboard, is Backspace+Escape+Enter.")
+
+    selections = run_wizard(FEATURES, ask, say)
+    if not selections:
+        say("\nNothing selected — no changes made.")
+        return 0
+
+    return _authorize_and_run(build_plan(selections, detect_system()),
+                              "install", "./install.sh", say, ask)
 
 
 def render_keyd_config(selections):
